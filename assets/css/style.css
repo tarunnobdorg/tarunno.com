@@ -85,3 +85,52 @@ nav a{font-size:13px;padding:8px 0;transition:color .2s}nav a:hover{color:var(--
 .blood-section #donorRegistrationWrap{grid-column:1/-1}
 @media(max-width:850px){.site-header{gap:9px;padding:10px 14px}.header-donate{padding:9px 12px;font-size:12px}.site-header:before{right:0;width:180px;opacity:.14}.hero-cta-split .btn{min-width:0;max-width:45%;}.blood-section{padding-inline:18px}}
 @media(max-width:560px){.site-header{display:flex!important;flex-wrap:wrap;align-items:center;gap:8px}.site-header .brand{order:1}.site-header .menu-toggle{order:2;margin-left:auto}.site-header .header-donate{order:3;padding:8px 11px;font-size:12px}.site-header .lang-btn{order:4;padding:8px 10px}.site-header nav{order:5;flex-basis:100%;width:100%}.hero-banner-only{min-height:250px!important;padding:16px 12px 18px!important}.hero-cta-split{justify-content:space-between!important;gap:10px!important}.hero-cta-split .btn{width:calc(50% - 5px)!important;max-width:none;min-width:0;padding:12px 8px;font-size:11px;white-space:normal;text-align:center}.hero-cta-split .btn:first-child{margin:0 auto 0 0!important}.hero-cta-split .donor-cta{margin:0 0 0 auto!important}.blood-section .form-card{width:100%;padding:18px}.blood-section .form-grid{grid-template-columns:1fr}}
+/* Mobile-first repair: keep the full Tarunno banner visible and prevent header overflow */
+@media (max-width: 600px) {
+  html, body { width:100%; max-width:100%; overflow-x:hidden; }
+  .site-header { display:flex!important; flex-wrap:wrap!important; align-items:center!important; gap:8px!important; padding:10px 12px!important; min-height:0!important; }
+  .site-header .brand { order:1!important; flex:1 1 calc(100% - 52px)!important; min-width:0!important; max-width:calc(100% - 52px)!important; gap:8px!important; }
+  .site-header .brand-logo { width:42px!important; height:42px!important; flex:0 0 42px!important; }
+  .site-header .brand-wordmark b { font-size:21px!important; white-space:nowrap; }
+  .site-header .brand-wordmark small { font-size:10px!important; white-space:nowrap; }
+  .site-header .menu-toggle { display:grid!important; place-items:center; order:2!important; flex:0 0 42px!important; width:42px!important; height:42px!important; padding:0!important; margin:0!important; border-radius:12px!important; }
+  .site-header .header-donate { order:3!important; flex:0 0 auto!important; margin:0 0 0 auto!important; padding:8px 13px!important; font-size:13px!important; }
+  .site-header .lang-btn { order:4!important; flex:0 0 auto!important; padding:8px 12px!important; font-size:13px!important; }
+  .site-header nav { order:5!important; display:none; flex:1 0 100%!important; width:100%!important; max-width:100%!important; padding:8px 0 4px!important; gap:2px!important; }
+  .site-header nav.open { display:flex!important; }
+  .site-header nav a { display:block; padding:10px 12px!important; font-size:15px!important; border-radius:10px!important; }
+  .site-header:before { right:0!important; width:145px!important; opacity:.10!important; }
+  /* Natural image ratio on phones: no cover-cropping of the logo or artwork. */
+  .hero-banner-only { display:flex!important; flex-direction:column!important; align-items:stretch!important; justify-content:flex-start!important; gap:0!important; width:100%!important; height:auto!important; min-height:0!important; max-height:none!important; padding:0!important; overflow:hidden!important; background:#f5f8ef!important; }
+  .hero-banner-only .hero-banner { display:block!important; position:relative!important; inset:auto!important; z-index:0!important; width:100%!important; height:auto!important; aspect-ratio:8 / 3!important; object-fit:contain!important; object-position:center center!important; opacity:1!important; }
+  .hero-banner-only:after { display:none!important; }
+  .hero-cta-only, .hero-cta-split { position:relative!important; z-index:2!important; display:flex!important; width:100%!important; max-width:none!important; flex-direction:row!important; justify-content:space-between!important; align-items:stretch!important; flex-wrap:nowrap!important; gap:10px!important; margin:0!important; padding:12px!important; background:#f5f8ef!important; }
+  .hero-cta-split .btn, .hero-cta-only .btn { flex:1 1 50%!important; width:50%!important; max-width:none!important; min-width:0!important; margin:0!important; padding:12px 8px!important; font-size:12px!important; line-height:1.35!important; white-space:normal!important; text-align:center!important; }
+  .stats { grid-template-columns:repeat(3,minmax(0,1fr))!important; padding:18px 8px!important; }
+  .stats div { min-width:0!important; padding:8px 4px!important; overflow-wrap:anywhere; }
+  .stats strong { font-size:23px!important; }
+  .stats span { font-size:11px!important; line-height:1.35!important; }
+  .section { padding:42px 18px!important; }
+  .section-heading { display:flex!important; flex-direction:column!important; align-items:flex-start!important; gap:12px!important; }
+  .section h2, .contact-band h2 { font-size:clamp(27px,7vw,34px)!important; overflow-wrap:anywhere; }
+  .card-grid, .gallery-grid { grid-template-columns:minmax(0,1fr)!important; }
+  .content-card, .gallery-item, .form-card { min-width:0!important; width:100%!important; }
+  .form-card { padding:16px!important; }
+  .form-grid, .donor-search-form, .membership-apply, .blood-section, .volunteer-section, .donation-section { grid-template-columns:minmax(0,1fr)!important; }
+  .donor-search-form { gap:12px!important; }
+  .blood-section { padding:28px 16px!important; }
+  .blood-section > *, .membership-apply > * { min-width:0!important; width:100%!important; }
+  .blood-section .form-card { margin-inline:auto!important; }
+  .footer-main { grid-template-columns:minmax(0,1fr)!important; padding:30px 20px!important; gap:22px!important; }
+  .footer-bottom { display:flex!important; flex-direction:column!important; align-items:flex-start!important; gap:8px!important; padding:14px 20px!important; overflow-wrap:anywhere; }
+  img { max-width:100%; }
+  input, select, textarea, button { max-width:100%; }
+}
+@media (min-width:601px) and (max-width:850px) {
+  .hero-banner-only { min-height:0!important; height:auto!important; display:flex!important; flex-direction:column!important; padding:0 0 12px!important; }
+  .hero-banner-only .hero-banner { position:relative!important; inset:auto!important; width:100%!important; height:auto!important; aspect-ratio:8/3!important; object-fit:contain!important; }
+  .hero-banner-only:after { display:none!important; }
+  .hero-cta-split { padding:12px 18px!important; }
+  .site-header { gap:10px!important; padding:10px 16px!important; }
+  .site-header nav { gap:6px!important; }
+}
