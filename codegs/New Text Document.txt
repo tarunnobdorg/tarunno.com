@@ -14,8 +14,9 @@ const SHEET_HEADERS = {
     "descriptionEn", "image", "status"
   ],
   Members: [
-    "id", "name", "role", "category", "photo",
-    "bioBn", "bioEn", "status"
+    "id", "name", "role", "category", "photo", "bioBn", "bioEn",
+    "status", "phone", "email", "gender", "dateOfBirth", "address",
+    "skills", "createdAt", "updatedAt", "membershipNumber", "language", "approvedAt"
   ],
   BloodDonors: [
     "id", "name", "bloodGroup", "phone", "district",
@@ -26,6 +27,8 @@ const SHEET_HEADERS = {
     "id", "donorName", "phone", "method", "amount",
     "transactionId", "createdAt", "status"
   ],
+  DonationMethods: ["id", "method", "account", "accountName", "status", "updatedAt"],
+  TeamMembers: ["id", "category", "name", "designation", "photo", "status", "updatedAt"],
   Gallery: [
     "id", "title", "imageUrl", "projectId", "createdAt"
   ],
@@ -137,6 +140,59 @@ function rowsAsObjects(sheetName) {
 }
 
 
+
+
+/* ---------- MEMBERSHIP APPROVAL AUTOMATION ---------- */
+function escapeHtml_(value) {
+  return String(value == null ? "" : value).replace(/[&<>"']/g, function(c) {
+    return ({"&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"})[c];
+  });
+}
+function membershipNumberFor_(date, serial) {
+  return "T-" + Utilities.formatDate(date, Session.getScriptTimeZone(), "yyyyMM") + String(serial).padStart(2, "0");
+}
+function installMembershipApprovalTrigger() {
+  const ss = getDatabase();
+  ScriptApp.getProjectTriggers().filter(function(t) { return t.getHandlerFunction() === "onEdit"; }).forEach(function(t) { ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger("onEdit").forSpreadsheet(ss).onEdit().create();
+  return "Membership approval email trigger installed.";
+}
+function onEdit(e) {
+  if (!e || !e.range) return;
+  const sheet = e.range.getSheet();
+  if (sheet.getName() !== "Members" || e.range.getRow() < 2) return;
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getDisplayValues()[0];
+  const col = {}; headers.forEach(function(h, i) { col[h] = i + 1; });
+  if (!col.status || e.range.getColumn() !== col.status) return;
+  if (String(e.value || "").toLowerCase() !== "approved") return;
+  const row = e.range.getRow();
+  const values = sheet.getRange(row, 1, 1, sheet.getLastColumn()).getDisplayValues()[0];
+  const get = function(key) { return col[key] ? String(values[col[key] - 1] || "").trim() : ""; };
+  if (get("membershipNumber")) return; // Do not issue duplicate numbers/emails.
+  const email = get("email");
+  const now = new Date();
+  const prefix = "T-" + Utilities.formatDate(now, Session.getScriptTimeZone(), "yyyyMM");
+  let serial = 1;
+  if (col.membershipNumber && sheet.getLastRow() >= 2) {
+    const nums = sheet.getRange(2, col.membershipNumber, sheet.getLastRow()-1, 1).getDisplayValues().flat();
+    nums.forEach(function(n) { const m = String(n).match(new RegExp("^" + prefix + "(\\d+)$")); if (m) serial = Math.max(serial, Number(m[1]) + 1); });
+  }
+  const memberNo = prefix + String(serial).padStart(2, "0");
+  if (col.membershipNumber) sheet.getRange(row, col.membershipNumber).setValue(memberNo);
+  if (col.approvedAt) sheet.getRange(row, col.approvedAt).setValue(now);
+  if (col.role) sheet.getRange(row, col.role).setValue("Member");
+  // Public Members listing filters for active status. Preserve approval as active after processing.
+  if (col.status) sheet.getRange(row, col.status).setValue("active");
+  if (col.category) sheet.getRange(row, col.category).setValue("Approved member");
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return;
+  const name = get("name") || "বন্ধু";
+  const isBn = get("language").toLowerCase().startsWith("bn");
+  const subject = isBn ? "তারুণ্যে স্বাগতম — আপনার সদস্য নম্বর " + memberNo : "Welcome to Tarunno — Membership " + memberNo;
+  const intro = isBn ? "আপনার সদস্যপদ আবেদন অনুমোদিত হয়েছে। তারুণ্য পরিবারের সদস্য হওয়ার জন্য অভিনন্দন!" : "Your membership application has been approved. Welcome to the Tarunno community!";
+  const html = '<div style="margin:0;background:#eef3f7;padding:24px 10px;font-family:Arial,Helvetica,sans-serif;color:#243247"><div style="max-width:620px;margin:auto;background:#fff;border:1px solid #d8e2ea;border-radius:10px;overflow:hidden"><div style="padding:22px;text-align:center;border-bottom:1px solid #e4ebf0"><div style="font-size:28px;font-weight:800"><span style="color:#18854b">তা</span><span style="color:#e23b43">রু</span><span style="color:#18854b">ণ্য</span></div><div style="font-size:12px;color:#4c6578">চলো এগিয়ে যাই · Tarunno</div></div><div style="background:#0877bd;color:white;padding:20px 24px"><div style="font-size:21px;font-weight:bold">'+(isBn?'তারুণ্যে স্বাগতম!':'Welcome to Tarunno!')+'</div><div style="margin-top:6px;font-size:13px">'+(isBn?'আপনার সদস্যপদ অনুমোদিত হয়েছে':'Your membership has been approved')+'</div></div><div style="padding:24px;line-height:1.65"><p>'+(isBn?'প্রিয় ':'Dear ')+escapeHtml_(name)+',</p><p>'+escapeHtml_(intro)+'</p><div style="text-align:center;background:#eff8f1;border:1px solid #cce8d3;border-radius:9px;padding:18px;margin:22px 0"><div style="font-size:12px;color:#42634b">'+(isBn?'আপনার সদস্য নম্বর':'YOUR MEMBERSHIP NUMBER')+'</div><div style="font-size:27px;letter-spacing:1px;font-weight:800;color:#18854b;margin-top:7px">'+memberNo+'</div></div><p>'+(isBn?'এই নম্বরটি ভবিষ্যতের জন্য সংরক্ষণ করুন।':'Please keep this number for your records.')+'</p><p>'+(isBn?'শুভেচ্ছান্তে,':'With gratitude,')+'<br><strong style="color:#18854b">তারুণ্য (Tarunno)</strong></p></div><div style="background:#f6f9fb;text-align:center;padding:15px;font-size:12px;color:#607285;border-top:1px solid #e1e9ef">wearetarunno@gmail.com · 017108638775<br>Shalbahan, Tetulia, Panchagarh, Bangladesh<br><strong style="color:#18854b">চলো এগিয়ে যাই</strong></div></div></div>';
+  MailApp.sendEmail({to:email, subject:subject, body:intro + "\nMembership Number: " + memberNo, htmlBody:html, name:"তারুণ্য | Tarunno", replyTo:"wearetarunno@gmail.com"});
+}
+
 /* ---------- GET API ---------- */
 
 function doGet(e) {
@@ -152,7 +208,7 @@ function doGet(e) {
     }
 
     const publicSheets = [
-      "SiteContent", "Projects", "Programs", "Members", "Gallery", "NewsEvents", "BloodDonors"
+      "SiteContent", "Projects", "Programs", "Members", "Gallery", "NewsEvents", "BloodDonors", "DonationMethods", "TeamMembers"
     ];
     const requestedSheet = action === "Donors" ? "BloodDonors" : action;
 
@@ -203,6 +259,49 @@ function doPost(e) {
     const action = String(body.action || "");
     const data = body.data || {};
 
+    // Admin-managed donation methods and About Us team directory. Configure Script Property TARUNNO_ADMIN_KEY before use.
+    const adminActions = ["saveDonationMethod", "deleteDonationMethod", "saveTeamMember", "deleteTeamMember"];
+    if (adminActions.indexOf(action) !== -1) {
+      const expectedKey = PropertiesService.getScriptProperties().getProperty("TARUNNO_ADMIN_KEY");
+      if (!expectedKey || String(body.adminKey || "") !== expectedKey) return jsonResponse({success:false,error:"ADMIN_AUTH_REQUIRED"});
+      const teamAction = action.indexOf("TeamMember") !== -1;
+      const targetSheet = getSheet(teamAction ? "TeamMembers" : "DonationMethods");
+      const headers = targetSheet.getRange(1,1,1,targetSheet.getLastColumn()).getDisplayValues()[0];
+      const rows = rowsAsObjects(teamAction ? "TeamMembers" : "DonationMethods");
+      const id = String(data.id || "").trim();
+      if (action.indexOf("delete") === 0) {
+        const rowIndex = rows.findIndex(function(r){return String(r.id) === id;});
+        if (rowIndex < 0) return jsonResponse({success:false,error:"RECORD_NOT_FOUND"});
+        targetSheet.deleteRow(rowIndex + 2);
+        return jsonResponse({success:true,deleted:id});
+      }
+      const required = teamAction ? ["category","name","designation"] : ["method","account"];
+      for (let i=0;i<required.length;i++) if (!String(data[required[i]] || "").trim()) return jsonResponse({success:false,error:"MISSING_FIELD",field:required[i]});
+      const record = {id:id || Utilities.getUuid(), updatedAt:new Date().toISOString(), status:String(data.status || "active")};
+      if (teamAction) {
+        ["category","name","designation","photo"].forEach(function(k){record[k]=String(data[k] || "").trim();});
+        if (data.photoData && String(data.photoData).indexOf("data:image/") === 0) {
+          const parts = String(data.photoData).match(/^data:(image\/(?:png|jpeg|webp));base64,([\s\S]+)$/);
+          if (!parts) return jsonResponse({success:false,error:"INVALID_IMAGE"});
+          const bytes = Utilities.base64Decode(parts[2]);
+          if (bytes.length > 1500000) return jsonResponse({success:false,error:"IMAGE_TOO_LARGE",message:"Please use an image under 1.5 MB."});
+          const blob = Utilities.newBlob(bytes, parts[1], "tarunno-team-" + record.id + (parts[1] === "image/png" ? ".png" : ".jpg"));
+          const folderName = "Tarunno Team Photos";
+          const folders = DriveApp.getFoldersByName(folderName);
+          const folder = folders.hasNext() ? folders.next() : DriveApp.createFolder(folderName);
+          const file = folder.createFile(blob);
+          file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+          record.photo = "https://drive.google.com/uc?export=view&id=" + file.getId();
+        }
+      } else {
+        ["method","account","accountName"].forEach(function(k){record[k]=String(data[k] || "").trim();});
+      }
+      const existingIndex = id ? rows.findIndex(function(r){return String(r.id) === id;}) : -1;
+      const values = headers.map(function(h){return record[h] === undefined ? (existingIndex >= 0 ? rows[existingIndex][h] || "" : "") : record[h];});
+      if (existingIndex >= 0) targetSheet.getRange(existingIndex + 2,1,1,headers.length).setValues([values]); else targetSheet.appendRow(values);
+      return jsonResponse({success:true,data:record});
+    }
+
     const forms = {
       registerDonor: {
         sheet: "BloodDonors",
@@ -221,6 +320,11 @@ function doPost(e) {
         ]
       },
 
+      registerMember: {
+        sheet: "Members",
+        required: ["name", "phone", "gender", "dateOfBirth", "address"],
+        fields: ["name", "phone", "email", "skills", "gender", "dateOfBirth", "address", "photoData", "language"]
+      },
       registerVolunteer: {
         sheet: "Volunteers",
         required: ["name", "phone"],
@@ -298,6 +402,14 @@ function doPost(e) {
     form.fields.forEach(function(field) {
       record[field] = String(data[field] ?? "").trim();
     });
+    if (action === "registerMember") {
+      record.role = "Applicant";
+      record.category = "Membership application";
+      record.photo = record.photoData || "";
+      delete record.photoData;
+      record.status = "pending";
+      record.language = String(data.language || "bn");
+    }
     // Normalize Bangladeshi mobile numbers that were entered without the leading zero.
     if (record.phone) {
       let phone = record.phone.replace(/[\s()-]/g, "");
@@ -310,26 +422,32 @@ function doPost(e) {
     const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getDisplayValues()[0];
     sheet.appendRow(headers.map(function(header) { return record[header] ?? ""; }));
 
-    // Optional confirmation email. It is sent by the Google account that owns/deployed this script.
+    // Branded HTML confirmation email. Email is sent by the account that owns/deploys this script.
     const recipient = String(data.email || "").trim();
     if (recipient && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) {
-      const name = String(data.name || "").trim() || "বন্ধু";
+      const name = String(data.name || "বন্ধু").trim() || "বন্ধু";
       const isBn = String(data.language || "bn").toLowerCase().startsWith("bn");
-      let subject, message;
-      if (action === "registerDonor") {
+      let subject = "", heading = "", intro = "", detail = "";
+      if (action === "registerMember") {
+        subject = isBn ? "তারুণ্যে সদস্যপদ আবেদনের নিশ্চয়তা" : "We received your Tarunno membership application";
+        heading = isBn ? "সদস্যপদ আবেদনের জন্য ধন্যবাদ!" : "Thank you for applying!";
+        intro = isBn ? "আপনার সদস্যপদ আবেদন আমরা পেয়েছি। আমাদের টিম তথ্য যাচাই করে সিদ্ধান্ত জানাবে। অনুমোদনের পর আলাদা Welcome Email-এ আপনার Membership Number পাঠানো হবে।" : "We have received your membership application. Our team will review your details. Once approved, you will receive a separate welcome email with your membership number.";
+      } else if (action === "registerDonor") {
         subject = isBn ? "তারুণ্যে রক্তদাতা নিবন্ধনের জন্য ধন্যবাদ" : "Thank you for registering as a blood donor — Tarunno";
-        message = isBn
-          ? "প্রিয় " + name + ",\n\nতারুণ্যের রক্তদাতা নেটওয়ার্কে নিবন্ধনের জন্য ধন্যবাদ। আপনার তথ্য আমরা পেয়েছি। যাচাই ও অনুমোদনের পর প্রয়োজন অনুযায়ী যোগাযোগ করা হবে।\n\nমানবতার পাশে,\nতারুণ্য (Tarunno)"
-          : "Dear " + name + ",\n\nThank you for registering with Tarunno’s blood donor network. We have received your details. Our team will review your registration before it appears in donor search.\n\nWith gratitude,\nTarunno";
+        heading = isBn ? "রক্তদাতা নিবন্ধনের জন্য ধন্যবাদ!" : "Thank you for registering!";
+        intro = isBn ? "তারুণ্যের রক্তদাতা নেটওয়ার্কে আপনার তথ্য পেয়েছি। যাচাই ও অনুমোদনের পর প্রয়োজন অনুযায়ী যোগাযোগ করা হবে।" : "We have received your registration for Tarunno’s blood donor network. Our team will review it before it appears in donor search.";
       } else if (action === "registerVolunteer") {
-        const isMember = String(data.applicationType || "").toLowerCase() === "membership";
-        subject = isBn ? (isMember ? "তারুণ্যে সদস্যপদ আবেদনের জন্য ধন্যবাদ" : "তারুণ্যে যুক্ত হওয়ার জন্য ধন্যবাদ") : (isMember ? "Thank you for your membership application — Tarunno" : "Thank you for contacting Tarunno");
-        message = isBn
-          ? "প্রিয় " + name + ",\n\nতারুণ্যে আপনার আবেদন আমরা পেয়েছি। সময় দেওয়ার জন্য ধন্যবাদ। যাচাই শেষে আমাদের টিম প্রয়োজন হলে আপনার সঙ্গে যোগাযোগ করবে।\n\nশুভেচ্ছান্তে,\nতারুণ্য (Tarunno)"
-          : "Dear " + name + ",\n\nThank you for your application to Tarunno. We have received it and our team will review the details. We will contact you if any further information is needed.\n\nWith gratitude,\nTarunno";
+        subject = isBn ? "তারুণ্যে আবেদন পাওয়ার নিশ্চয়তা" : "Thank you for contacting Tarunno";
+        heading = isBn ? "আপনার আবেদন পেয়েছি" : "We received your application";
+        intro = isBn ? "তারুণ্যে যুক্ত হতে আগ্রহী হওয়ার জন্য ধন্যবাদ। আমাদের টিম আপনার আবেদন পর্যালোচনা করবে।" : "Thank you for your interest in Tarunno. Our team will review your application.";
       }
-      try { MailApp.sendEmail({to: recipient, subject: subject, body: message, name: "Tarunno | তারুণ্য", replyTo: "wearetarunno@gmail.com"}); }
-      catch (mailError) { console.error("Confirmation email failed: " + mailError); }
+      if (subject) {
+        const safeName = escapeHtml_(name);
+        const safeIntro = escapeHtml_(intro);
+        const html = '<div style="margin:0;background:#eef3f7;padding:24px 10px;font-family:Arial,Helvetica,sans-serif;color:#243247"><div style="max-width:620px;margin:auto;background:#fff;border:1px solid #d8e2ea;border-radius:10px;overflow:hidden"><div style="padding:22px 24px;text-align:center;border-bottom:1px solid #e4ebf0"><div style="font-size:28px;font-weight:800;letter-spacing:-1px"><span style="color:#18854b">তা</span><span style="color:#e23b43">রু</span><span style="color:#18854b">ণ্য</span></div><div style="font-size:12px;color:#4c6578;margin-top:4px">চলো এগিয়ে যাই · Tarunno</div></div><div style="background:#0877bd;color:#fff;padding:18px 24px"><div style="font-size:20px;font-weight:700">'+escapeHtml_(heading)+'</div><div style="font-size:13px;margin-top:7px">'+(isBn?'আপনার তথ্য সফলভাবে গ্রহণ করা হয়েছে।':'Your information has been received successfully.')+'</div></div><div style="padding:24px;line-height:1.65;font-size:14px"><p>'+(isBn?'প্রিয় ':'Dear ')+safeName+',</p><p>'+safeIntro+'</p><div style="background:#f0f7fc;border-radius:8px;padding:14px 16px;margin:18px 0"><div style="font-weight:700;color:#176b9b;margin-bottom:5px">'+(isBn?'আপনার আবেদন':'Your application')+'</div><div>'+(isBn?'নাম':'Name')+': '+safeName+'</div><div>'+(isBn?'অবস্থা':'Status')+': '+(isBn?'পর্যালোচনার অপেক্ষায়':'Pending review')+'</div></div><p>'+(isBn?'শুভেচ্ছান্তে,':'With gratitude,')+'<br><strong style="color:#18854b">Hope for a better tomorrow — Tarunno</strong></p></div><div style="background:#f6f9fb;text-align:center;padding:15px;font-size:12px;color:#607285;border-top:1px solid #e1e9ef">wearetarunno@gmail.com · 017108638775<br>Shalbahan, Tetulia, Panchagarh, Bangladesh<br><span style="color:#18854b;font-weight:bold">চলো এগিয়ে যাই</span></div></div></div>';
+        try { MailApp.sendEmail({to:recipient, subject:subject, body:intro, htmlBody:html, name:"তারুণ্য | Tarunno", replyTo:"wearetarunno@gmail.com"}); }
+        catch (mailError) { console.error("Confirmation email failed: " + mailError); }
+      }
     }
 
     return jsonResponse({

@@ -109,29 +109,83 @@
   $("#donorForm")?.addEventListener("submit", e => { e.preventDefault(); submitForm(e.currentTarget, "registerDonor", "#donorStatus"); });
   $("#donationForm")?.addEventListener("submit", e => { e.preventDefault(); submitForm(e.currentTarget, "submitDonation", "#donationStatus"); });
   let donorRecords = [];
+  let donorLoadError = false;
+  let donorSearchSubmitted = false;
   async function initDonorFinder() {
     if (!$("#donorResults")) return;
-    try { donorRecords = await getData("BloodDonors"); }
-    catch(e) { $("#donorResults").innerHTML = `<div class="empty-state">${lang === "bn" ? "রক্তদাতার তালিকা পাওয়া যায়নি। শিট/API-তে Donors তালিকা চালু আছে কি না দেখুন।" : "Donor list unavailable. Check that the BloodDonors sheet/API is enabled."}</div>`; return; }
-    renderDonors();
+    // Keep results empty until the visitor explicitly submits a search.
+    $("#donorResults").innerHTML = "";
+    try { donorRecords = await getData("BloodDonors"); donorLoadError = false; }
+    catch(e) { donorRecords = []; donorLoadError = true; console.error("BloodDonors", e); }
   }
   function renderDonors() {
     const node = $("#donorResults"); if (!node) return;
+    donorSearchSubmitted = true;
+    if (donorLoadError) {
+      node.innerHTML = `<div class="empty-state">${lang === "bn" ? "এই মুহূর্তে রক্তদাতার তথ্য পাওয়া যাচ্ছে না। পরে আবার চেষ্টা করুন।" : "Donor information is currently unavailable. Please try again later."}</div>`;
+      return;
+    }
     const group = $("#searchBloodGroup")?.value || "";
-    const area = ($("#searchArea")?.value || "").trim().toLowerCase();
-    const district = ($("#searchDistrict")?.value || "").trim().toLowerCase();
+    const area = ($("#searchArea")?.value || "").trim().toLocaleLowerCase();
+    const district = ($("#searchDistrict")?.value || "").trim().toLocaleLowerCase();
+    const normalize = value => String(value || "").trim().toLocaleLowerCase();
     const approved = donorRecords.filter(d => {
-      const status = String(d.status || d.approvalStatus || "").toLowerCase();
-      const consent = String(d.consent || "").toLowerCase();
-      const isApproved = ["approved","active","verified","অনুমোদিত"].includes(status) || d.approved === true || String(d.approved).toLowerCase()==="true";
+      const status = normalize(d.status || d.approvalStatus);
+      const consent = normalize(d.consent);
+      const isApproved = ["approved","active","verified","অনুমোদিত"].includes(status) || d.approved === true || String(d.approved).toLowerCase() === "true";
       const canContact = ["true","yes","1","হ্যাঁ"].includes(consent) || d.contactConsent === true;
-      return isApproved && canContact && (!group || String(d.bloodGroup || "").toUpperCase()===group.toUpperCase()) && (!district || String(d.district||"").toLowerCase()===district) && (!area || String(d.upazila||"").toLowerCase()===area);
+      return isApproved && canContact && (!group || String(d.bloodGroup || "").toUpperCase() === group.toUpperCase()) && (!district || normalize(d.district) === district) && (!area || normalize(d.upazila) === area);
     });
-    if (!approved.length) { node.innerHTML = `<div class="empty-state">${lang === "bn" ? "মিল পাওয়া যায়নি। অন্য রক্তের গ্রুপ বা এলাকা দিয়ে খুঁজুন।" : "No matching approved donors. Try another blood group or area."}</div>`; return; }
+    if (!approved.length) {
+      node.innerHTML = `<div class="empty-state">${lang === "bn" ? "এই অনুসন্ধানে কোনো রক্তদাতা পাওয়া যায়নি।" : "No donors matched your search."}</div>`;
+      return;
+    }
     const normalizedPhone = value => { let n=String(value||"").replace(/[^+0-9]/g,""); if(/^1[3-9]\d{8}$/.test(n)) n="0"+n; if(/^8801[3-9]\d{8}$/.test(n)) n="+"+n; return n; };
-    node.innerHTML = approved.map(d => { const phone=normalizedPhone(d.phone); const address=[d.address,d.upazila,d.district].filter(Boolean).join(", "); return `<article class="content-card donor-card"><div class="card-body"><h3>${esc(d.name||"Donor")}</h3><p><strong>${esc(d.bloodGroup||"")}</strong></p>${address ? `<p>${esc(address)}</p>` : ""}${phone ? `<p><strong>${lang === "bn" ? "ফোন:" : "Phone:"}</strong> <a href="tel:${esc(phone)}">${esc(phone)}</a></p>` : ""}</div></article>`; }).join("");
+    node.innerHTML = approved.map(d => {
+      const phone = normalizedPhone(d.phone);
+      const address = [d.address,d.upazila,d.district].filter(Boolean).join(", ");
+      return `<article class="content-card donor-card"><div class="card-body"><h3>${esc(d.name || (lang === "bn" ? "রক্তদাতা" : "Blood donor"))}</h3><p><strong>${esc(d.bloodGroup || "")}</strong></p>${address ? `<p>${esc(address)}</p>` : ""}${phone ? `<p><strong>${lang === "bn" ? "ফোন:" : "Phone:"}</strong> <a href="tel:${esc(phone)}">${esc(phone)}</a></p>` : ""}</div></article>`;
+    }).join("");
   }
   $("#donorSearchForm")?.addEventListener("submit", e => { e.preventDefault(); renderDonors(); });
+  // The upper CTA opens the registration form without adding a duplicate CTA lower on the page.
+  function openDonorRegistration(e) {
+    e?.preventDefault();
+    const wrap = $("#donorRegistrationWrap");
+    if (wrap) { wrap.hidden = false; wrap.scrollIntoView({behavior:"smooth",block:"start"}); }
+  }
+  $("#openDonorFormTop")?.addEventListener("click", openDonorRegistration);
+  $("#openDonorForm")?.addEventListener("click", openDonorRegistration);
+
+  async function loadCommitteeSections() {
+    if (!$("#founderGrid")) return;
+    try {
+      let people = []; try { people = await getData("TeamMembers"); } catch(e) { people = await getData("Members"); }
+      const categories = [
+        {id:"#founderGrid", words:["founder","প্রতিষ্ঠাতা"]},
+        {id:"#advisorGrid", words:["advisor","adviser","উপদেষ্টা"]},
+        {id:"#executiveGrid", words:["executive","committee","কার্যনির্বাহী","কমিটি"]}
+      ];
+      categories.forEach(section => {
+        const node = $(section.id); if (!node) return;
+        const matches = people.filter(person => {
+          const category = `${person.category || ""} ${person.role || ""}`.toLocaleLowerCase();
+          return section.words.some(word => category.includes(word));
+        });
+        if (!matches.length) {
+          node.innerHTML = `<div class="empty-state">${lang === "bn" ? "তথ্য যোগ করা হলে এখানে দেখা যাবে।" : "Details will appear here when added."}</div>`;
+          return;
+        }
+        node.innerHTML = matches.map(person => {
+          const name = esc(person.name || "");
+          const role = esc(person.designation || person.role || person.category || "");
+          const bio = esc(pick(person, "bioBn", "bioEn"));
+          const photo = person.photo || person.image || "";
+          return `<article class="content-card">${photo ? `<div class="card-image"><img src="${esc(photo)}" alt="${name}" loading="lazy"></div>` : `<div class="card-placeholder"><span>ত</span></div>`}<div class="card-body"><h3>${name}</h3>${role ? `<p><strong>${role}</strong></p>` : ""}${bio ? `<p>${bio}</p>` : ""}</div></article>`;
+        }).join("");
+      });
+    } catch (e) { console.warn("Committee data unavailable", e); }
+  }
   function compressImage(file) {
     return new Promise((resolve,reject) => {
       if (!file) return resolve("");
@@ -141,7 +195,7 @@
     });
   }
   $("#memberPhoto")?.addEventListener("change", async e => { const preview=$("#memberPhotoPreview"); try { const data=await compressImage(e.target.files[0]); $("[name=photoData]").value=data; if(data){preview.src=data;preview.hidden=false;} else preview.hidden=true; } catch(err){ e.target.value=""; $("#memberStatus").textContent=err.message; } });
-  $("#memberForm")?.addEventListener("submit", async e => { e.preventDefault(); const form=e.currentTarget; const status=$("#memberStatus"); try { const file=$("#memberPhoto")?.files[0]; if(file && !$("[name=photoData]").value) $("[name=photoData]").value=await compressImage(file); const data=Object.fromEntries(new FormData(form).entries()); data.language=lang; if(data.phone) data.phone=normalizeBangladeshPhone(data.phone); data.applicationType="membership"; await submitPayload("registerVolunteer",data,status,form); } catch(err){ status.textContent=err.message; } });
+  $("#memberForm")?.addEventListener("submit", async e => { e.preventDefault(); const form=e.currentTarget; const status=$("#memberStatus"); try { const file=$("#memberPhoto")?.files[0]; if(file && !$("[name=photoData]").value) $("[name=photoData]").value=await compressImage(file); const data=Object.fromEntries(new FormData(form).entries()); data.language=lang; if(data.phone) data.phone=normalizeBangladeshPhone(data.phone); data.applicationType="membership"; await submitPayload("registerMember",data,status,form); } catch(err){ status.textContent=err.message; } });
   async function submitPayload(action,data,status,form) {
     if (!API) { status.textContent="API URL is missing."; return; }
     const button=form.querySelector("button[type=submit]"); button.disabled=true; status.textContent=lang === "bn" ? "জমা হচ্ছে…" : "Submitting…";
@@ -155,7 +209,7 @@
     load("Programs", "#programsGrid", ["titleBn", "titleEn", "descriptionBn", "descriptionEn"]);
     load("Members", "#membersGrid", ["name", "name", "bioBn", "bioEn"], "photo");
     load("NewsEvents", "#newsGrid", ["titleBn", "titleEn", "descriptionBn", "descriptionEn"]);
-    loadGallery();
+    loadGallery(); loadCommitteeSections();
   }
   document.addEventListener("DOMContentLoaded", boot);
 })();

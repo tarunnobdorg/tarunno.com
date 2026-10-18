@@ -32,3 +32,56 @@ nav a{font-size:13px;padding:8px 0;transition:color .2s}nav a:hover{color:var(--
 .form-card select,.form-card input,.form-card textarea{font:inherit}
 @media(max-width:850px){.hero-banner-only{min-height:300px!important;padding-bottom:20px!important}}
 @media(max-width:560px){.hero-banner-only{min-height:240px!important;padding-bottom:16px!important}}
+
+/* Tetulia-inspired header and clearer CTA placement */
+.site-header{position:relative;isolation:isolate;overflow:hidden;background:linear-gradient(110deg,#fff 0%,#fbfdf9 60%,#f0f7ed 100%);}
+.site-header:before{content:"";position:absolute;right:11%;top:0;width:280px;height:100%;opacity:.24;z-index:-1;pointer-events:none;background:linear-gradient(155deg,transparent 0 22%,#7ebc83 22.5% 33%,transparent 33.5%),linear-gradient(165deg,transparent 0 40%,#c8dfb2 40.5% 56%,transparent 56.5%),linear-gradient(175deg,transparent 0 58%,#2e8552 58.5% 70%,transparent 70.5%);}
+.site-header:after{content:"";position:absolute;right:0;bottom:0;width:100%;height:3px;background:linear-gradient(90deg,#087443 0 44%,#e3262e 44% 52%,#087443 52%);pointer-events:none;}
+.site-header>.brand,.site-header>nav,.site-header>.lang-btn,.site-header>.menu-toggle{position:relative;z-index:1}
+.hero-cta-split{width:100%;justify-content:space-between;max-width:1100px;margin-inline:auto;align-items:center;gap:24px}
+.hero-cta-split .btn:first-child{margin-left:3%;}
+.hero-cta-split .btn:last-child{margin-right:3%;}
+.donor-finder .section-heading{align-items:center;gap:18px}
+.donor-top-cta{flex:0 0 auto;white-space:nowrap}
+.donor-results:empty{display:none}
+.donor-results:not(:empty){margin-top:24px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px}
+.donor-card{border:1px solid #d5e9db;box-shadow:0 12px 30px #064d3210;transition:transform .18s ease,box-shadow .18s ease}
+.donor-card:hover{transform:translateY(-3px);box-shadow:0 16px 32px #064d3218}
+.donor-card .card-body{position:relative;padding:22px 22px 22px 28px}
+.donor-card .card-body:before{content:"";position:absolute;left:0;top:20px;bottom:20px;width:4px;border-radius:0 6px 6px 0;background:linear-gradient(#087443 0 55%,#e3262e 55%)}
+.donor-card .card-body>p:first-of-type strong{display:inline-flex;align-items:center;justify-content:center;min-width:46px;height:40px;padding:0 10px;border-radius:12px;background:#e8f5ec;color:#087443;font-size:18px}
+.donor-card a[href^="tel:"]{font-weight:800;color:#087443;text-decoration:none}
+.team-section .section-heading{margin-bottom:24px}
+.team-grid .content-card .card-image img{width:100%;height:240px;object-fit:cover}
+@media(max-width:850px){.site-header:before{right:0;width:160px;opacity:.15}.hero-cta-split{gap:12px}.hero-cta-split .btn:first-child{margin-left:0}.hero-cta-split .btn:last-child{margin-right:0}.donor-finder .section-heading{align-items:flex-start;flex-direction:column}.donor-top-cta{align-self:flex-start}}
+@media(max-width:560px){.hero-cta-split{justify-content:space-between;align-items:flex-end;gap:12px}.hero-cta-split .btn{width:calc(50% - 6px);min-width:0;padding:12px 10px;font-size:12px}.donor-top-cta{width:100%;text-align:center}.team-grid{grid-template-columns:1fr}}
+
+/* Refined Tetulia-inspired header and footer */
+.site-header{background:linear-gradient(105deg,#ffffff 0%,#f5faf4 58%,#eaf4e8 100%);box-shadow:0 7px 24px rgba(7,65,39,.09);border-bottom:3px solid transparent;border-image:linear-gradient(90deg,#087443 0 46%,#e3262e 46% 53%,#087443 53%) 1;gap:clamp(10px,1.6vw,24px)}
+.site-header:before{right:18%;width:320px;opacity:.2;background:linear-gradient(150deg,transparent 0 20%,#a4c99a 20.5% 32%,transparent 32.5%),linear-gradient(165deg,transparent 0 38%,#6aa76c 38.5% 52%,transparent 52.5%),linear-gradient(175deg,transparent 0 58%,#176c43 58.5% 70%,transparent 70.5%)}
+.site-header nav a{padding:9px 10px;border-radius:999px;transition:background .2s,color .2s}
+.site-header nav a:hover{background:#e1f0e3;color:#075b36}
+.site-header .lang-btn{background:#fff;border-color:#c9dfcb;box-shadow:0 3px 10px #174d3210}
+.site-footer{background:radial-gradient(ellipse at 90% 0%,#146f48 0%,transparent 34%),linear-gradient(130deg,#063b29,#075337 60%,#043522)!important;border-top:4px solid #e3262e!important}
+.footer-main{max-width:1500px;margin:auto}.footer-brand img{box-shadow:0 5px 18px #001e1233}.footer-links a,.footer-contact a{transition:transform .18s,color .18s}.footer-links a:hover,.footer-contact a:hover{transform:translateX(3px)}.footer-button{box-shadow:0 6px 18px #001e1225}.footer-bottom{background:#032d20!important}
+.donate-cta{background:#e3262e;color:#fff;margin-left:12px}
+@media(max-width:850px){.site-header:before{right:0;width:170px}.site-header nav a{border-radius:8px}.donate-cta{margin-left:0}}
+
+
+/* October responsive refinement: header donation link, balanced hero actions, centered donor form */
+.site-header{gap:clamp(8px,1.2vw,18px);background:linear-gradient(112deg,#fff 0%,#f8fcf8 52%,#e8f4e8 100%);border-bottom:3px solid transparent;border-image:linear-gradient(90deg,#087443 0 46%,#e3262e 46% 52%,#087443 52%) 1;box-shadow:0 6px 22px rgba(5,70,40,.10)}
+.site-header:before{content:"";position:absolute;right:13%;top:0;width:300px;height:100%;opacity:.20;z-index:-1;pointer-events:none;background:linear-gradient(155deg,transparent 0 22%,#9ac89b 22.5% 34%,transparent 34.5%),linear-gradient(165deg,transparent 0 39%,#c6dfbd 39.5% 53%,transparent 53.5%),linear-gradient(175deg,transparent 0 57%,#43885a 57.5% 69%,transparent 69.5%)}
+.header-donate{display:inline-flex;align-items:center;justify-content:center;white-space:nowrap;padding:10px 15px;border-radius:999px;color:#fff;background:linear-gradient(135deg,#e3262e,#bd1724);font-weight:800;font-size:13px;box-shadow:0 5px 14px rgba(227,38,46,.22);border:1px solid rgba(255,255,255,.75);transition:transform .2s,box-shadow .2s;position:relative;z-index:2}
+.header-donate:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(227,38,46,.3);color:#fff}
+.hero-cta-split{display:flex!important;justify-content:space-between!important;align-items:center!important;width:min(100%,1120px)!important;gap:18px!important}
+.hero-cta-split .btn{min-width:190px;max-width:260px}
+.hero-cta-split .btn:first-child{margin:0 auto 0 2%!important}
+.hero-cta-split .donor-cta{margin:0 2% 0 auto!important}
+/* keep the centre of the banner clear for the Tarunno logo/artwork */
+#donorRegistrationWrap{width:100%;max-width:760px;margin:24px auto 0}
+#donorRegistrationWrap form{width:100%;margin-inline:auto}
+.blood-section{grid-template-columns:minmax(0,1fr)!important;justify-items:center}
+.blood-section .blood-intro{width:100%;max-width:760px;margin-inline:auto;text-align:center}
+.blood-section #donorRegistrationWrap{grid-column:1/-1}
+@media(max-width:850px){.site-header{gap:9px;padding:10px 14px}.header-donate{padding:9px 12px;font-size:12px}.site-header:before{right:0;width:180px;opacity:.14}.hero-cta-split .btn{min-width:0;max-width:45%;}.blood-section{padding-inline:18px}}
+@media(max-width:560px){.site-header{display:flex!important;flex-wrap:wrap;align-items:center;gap:8px}.site-header .brand{order:1}.site-header .menu-toggle{order:2;margin-left:auto}.site-header .header-donate{order:3;padding:8px 11px;font-size:12px}.site-header .lang-btn{order:4;padding:8px 10px}.site-header nav{order:5;flex-basis:100%;width:100%}.hero-banner-only{min-height:250px!important;padding:16px 12px 18px!important}.hero-cta-split{justify-content:space-between!important;gap:10px!important}.hero-cta-split .btn{width:calc(50% - 5px)!important;max-width:none;min-width:0;padding:12px 8px;font-size:11px;white-space:normal;text-align:center}.hero-cta-split .btn:first-child{margin:0 auto 0 0!important}.hero-cta-split .donor-cta{margin:0 0 0 auto!important}.blood-section .form-card{width:100%;padding:18px}.blood-section .form-grid{grid-template-columns:1fr}}
