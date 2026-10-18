@@ -1,0 +1,348 @@
+
+/*************************************************
+ * TARUNNO WEBSITE - GOOGLE APPS SCRIPT API
+ *************************************************/
+
+const SHEET_HEADERS = {
+  SiteContent: ["key", "bn", "en", "updatedAt"],
+  Projects: [
+    "id", "titleBn", "titleEn", "descriptionBn",
+    "descriptionEn", "image", "date", "status"
+  ],
+  Programs: [
+    "id", "titleBn", "titleEn", "descriptionBn",
+    "descriptionEn", "image", "status"
+  ],
+  Members: [
+    "id", "name", "role", "category", "photo",
+    "bioBn", "bioEn", "status"
+  ],
+  BloodDonors: [
+    "id", "name", "bloodGroup", "phone", "district",
+    "upazila", "lastDonation", "consent", "status",
+    "email", "gender", "dateOfBirth", "address", "createdAt"
+  ],
+  Donations: [
+    "id", "donorName", "phone", "method", "amount",
+    "transactionId", "createdAt", "status"
+  ],
+  Gallery: [
+    "id", "title", "imageUrl", "projectId", "createdAt"
+  ],
+  NewsEvents: [
+    "id", "titleBn", "titleEn", "descriptionBn",
+    "descriptionEn", "image", "eventDate"
+  ],
+  Volunteers: [
+    "id", "name", "phone", "email", "skills",
+    "createdAt", "status", "gender", "dateOfBirth", "address", "applicationType"
+  ],
+  AdminUsers: ["email", "role", "status"]
+};
+
+
+/* ---------- COMMON HELPERS ---------- */
+
+function jsonResponse(data) {
+  return ContentService
+    .createTextOutput(JSON.stringify(data))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function getDatabase() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  if (!ss) {
+    throw new Error(
+      "No spreadsheet is connected. Open this script from your Google Sheet."
+    );
+  }
+
+  return ss;
+}
+
+function getSheet(sheetName) {
+  const sheet = getDatabase().getSheetByName(sheetName);
+
+  if (!sheet) {
+    throw new Error("Sheet not found: " + sheetName);
+  }
+
+  return sheet;
+}
+
+
+/* ---------- CREATE DATABASE SHEETS ---------- */
+
+function setupTarunnoSheets() {
+  const ss = getDatabase();
+
+  Object.entries(SHEET_HEADERS).forEach(function(entry) {
+    const sheetName = entry[0];
+    const headers = entry[1];
+
+    let sheet = ss.getSheetByName(sheetName);
+
+    if (!sheet) {
+      sheet = ss.insertSheet(sheetName);
+    }
+
+    if (sheet.getLastRow() === 0) {
+      sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+      sheet.setFrozenRows(1);
+    } else {
+      // Add newly introduced columns to existing sheets without changing existing data.
+      const current = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getDisplayValues()[0];
+      const missing = headers.filter(function(header) { return current.indexOf(header) === -1; });
+      if (missing.length) sheet.getRange(1, sheet.getLastColumn() + 1, 1, missing.length).setValues([missing]);
+    }
+  });
+
+  return "Tarunno database sheets are ready.";
+}
+
+
+/* ---------- READ SHEET DATA ---------- */
+
+function rowsAsObjects(sheetName) {
+  const sheet = getSheet(sheetName);
+  const values = sheet.getDataRange().getDisplayValues();
+
+  if (values.length < 2) {
+    return [];
+  }
+
+  const headers = values[0];
+
+  return values.slice(1)
+    .filter(function(row) {
+      return row.some(function(value) {
+        return value !== "";
+      });
+    })
+    .map(function(row) {
+      const item = {};
+
+      headers.forEach(function(header, index) {
+        item[header] = row[index] || "";
+      });
+
+      return item;
+    })
+    .filter(function(item) {
+      // Donor search performs its own approval + consent checks in the browser.
+      if (sheetName === "BloodDonors") return true;
+      return !item.status || String(item.status).toLowerCase() === "active";
+    });
+}
+
+
+/* ---------- GET API ---------- */
+
+function doGet(e) {
+  try {
+    const params = e && e.parameter ? e.parameter : {};
+    const action = params.action || "health";
+
+    if (action === "health") {
+      return jsonResponse({
+        success: true,
+        message: "Tarunno API is running"
+      });
+    }
+
+    const publicSheets = [
+      "SiteContent", "Projects", "Programs", "Members", "Gallery", "NewsEvents", "BloodDonors"
+    ];
+    const requestedSheet = action === "Donors" ? "BloodDonors" : action;
+
+    if (publicSheets.indexOf(requestedSheet) === -1) {
+      return jsonResponse({
+        success: false,
+        error: "UNKNOWN_ACTION",
+        allowedActions: publicSheets
+      });
+    }
+
+    return jsonResponse({
+      success: true,
+      data: rowsAsObjects(requestedSheet)
+    });
+
+  } catch (error) {
+    return jsonResponse({
+      success: false,
+      error: String(error.message || error)
+    });
+  }
+}
+
+
+/* ---------- POST API: PUBLIC FORMS ---------- */
+
+function doPost(e) {
+  try {
+    if (!e || !e.postData || !e.postData.contents) {
+      return jsonResponse({
+        success: false,
+        error: "MISSING_BODY"
+      });
+    }
+
+    let body;
+
+    try {
+      body = JSON.parse(e.postData.contents);
+    } catch (parseError) {
+      return jsonResponse({
+        success: false,
+        error: "INVALID_JSON"
+      });
+    }
+
+    const action = String(body.action || "");
+    const data = body.data || {};
+
+    const forms = {
+      registerDonor: {
+        sheet: "BloodDonors",
+        required: ["name", "bloodGroup", "phone", "district", "upazila", "gender", "dateOfBirth", "consent"],
+        fields: ["name", "bloodGroup", "phone", "district", "upazila", "lastDonation", "consent", "email", "gender", "dateOfBirth", "address"]
+      },
+
+      submitDonation: {
+        sheet: "Donations",
+        required: [
+          "donorName", "method", "amount", "transactionId"
+        ],
+        fields: [
+          "donorName", "phone", "method",
+          "amount", "transactionId"
+        ]
+      },
+
+      registerVolunteer: {
+        sheet: "Volunteers",
+        required: ["name", "phone"],
+        fields: ["name", "phone", "email", "skills", "gender", "dateOfBirth", "address", "applicationType"]
+      }
+    };
+
+    const form = forms[action];
+
+    if (!form) {
+      return jsonResponse({
+        success: false,
+        error: "UNKNOWN_ACTION",
+        allowedActions: Object.keys(forms)
+      });
+    }
+
+    // Validate required fields.
+    for (let i = 0; i < form.required.length; i++) {
+      const field = form.required[i];
+
+      if (
+        data[field] === undefined ||
+        data[field] === null ||
+        String(data[field]).trim() === ""
+      ) {
+        return jsonResponse({
+          success: false,
+          error: "MISSING_FIELD",
+          field: field
+        });
+      }
+    }
+
+    // Donor registration requires explicit consent.
+    if (
+      action === "registerDonor" &&
+      String(data.consent).toLowerCase() !== "true"
+    ) {
+      return jsonResponse({
+        success: false,
+        error: "CONSENT_REQUIRED"
+      });
+    }
+
+    // Validate donation details.
+    if (action === "submitDonation") {
+      const amount = Number(data.amount);
+      const allowedMethods = ["Bkash", "Nagad", "Rocket"];
+
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return jsonResponse({
+          success: false,
+          error: "INVALID_AMOUNT"
+        });
+      }
+
+      if (allowedMethods.indexOf(String(data.method)) === -1) {
+        return jsonResponse({
+          success: false,
+          error: "INVALID_PAYMENT_METHOD"
+        });
+      }
+    }
+
+    const sheet = getSheet(form.sheet);
+
+    const record = {
+      id: Utilities.getUuid(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      status: "pending"
+    };
+
+    form.fields.forEach(function(field) {
+      record[field] = String(data[field] ?? "").trim();
+    });
+    // Normalize Bangladeshi mobile numbers that were entered without the leading zero.
+    if (record.phone) {
+      let phone = record.phone.replace(/[\s()-]/g, "");
+      if (/^1[3-9]\d{8}$/.test(phone)) phone = "0" + phone;
+      if (/^8801[3-9]\d{8}$/.test(phone)) phone = "0" + phone.slice(3);
+      record.phone = phone;
+    }
+
+    // Use the actual sheet header order so newly appended columns remain aligned.
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getDisplayValues()[0];
+    sheet.appendRow(headers.map(function(header) { return record[header] ?? ""; }));
+
+    // Optional confirmation email. It is sent by the Google account that owns/deployed this script.
+    const recipient = String(data.email || "").trim();
+    if (recipient && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) {
+      const name = String(data.name || "").trim() || "বন্ধু";
+      const isBn = String(data.language || "bn").toLowerCase().startsWith("bn");
+      let subject, message;
+      if (action === "registerDonor") {
+        subject = isBn ? "তারুণ্যে রক্তদাতা নিবন্ধনের জন্য ধন্যবাদ" : "Thank you for registering as a blood donor — Tarunno";
+        message = isBn
+          ? "প্রিয় " + name + ",\n\nতারুণ্যের রক্তদাতা নেটওয়ার্কে নিবন্ধনের জন্য ধন্যবাদ। আপনার তথ্য আমরা পেয়েছি। যাচাই ও অনুমোদনের পর প্রয়োজন অনুযায়ী যোগাযোগ করা হবে।\n\nমানবতার পাশে,\nতারুণ্য (Tarunno)"
+          : "Dear " + name + ",\n\nThank you for registering with Tarunno’s blood donor network. We have received your details. Our team will review your registration before it appears in donor search.\n\nWith gratitude,\nTarunno";
+      } else if (action === "registerVolunteer") {
+        const isMember = String(data.applicationType || "").toLowerCase() === "membership";
+        subject = isBn ? (isMember ? "তারুণ্যে সদস্যপদ আবেদনের জন্য ধন্যবাদ" : "তারুণ্যে যুক্ত হওয়ার জন্য ধন্যবাদ") : (isMember ? "Thank you for your membership application — Tarunno" : "Thank you for contacting Tarunno");
+        message = isBn
+          ? "প্রিয় " + name + ",\n\nতারুণ্যে আপনার আবেদন আমরা পেয়েছি। সময় দেওয়ার জন্য ধন্যবাদ। যাচাই শেষে আমাদের টিম প্রয়োজন হলে আপনার সঙ্গে যোগাযোগ করবে।\n\nশুভেচ্ছান্তে,\nতারুণ্য (Tarunno)"
+          : "Dear " + name + ",\n\nThank you for your application to Tarunno. We have received it and our team will review the details. We will contact you if any further information is needed.\n\nWith gratitude,\nTarunno";
+      }
+      try { MailApp.sendEmail({to: recipient, subject: subject, body: message, name: "Tarunno | তারুণ্য", replyTo: "wearetarunno@gmail.com"}); }
+      catch (mailError) { console.error("Confirmation email failed: " + mailError); }
+    }
+
+    return jsonResponse({
+      success: true,
+      message: "Submission received",
+      id: record.id,
+      status: record.status
+    });
+
+  } catch (error) {
+    return jsonResponse({
+      success: false,
+      error: String(error.message || error)
+    });
+  }
+}
