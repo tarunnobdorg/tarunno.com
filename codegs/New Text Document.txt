@@ -190,7 +190,12 @@ function onEdit(e) {
   const subject = isBn ? "তারুণ্যে স্বাগতম — আপনার সদস্য নম্বর " + memberNo : "Welcome to Tarunno — Membership " + memberNo;
   const intro = isBn ? "আপনার সদস্যপদ আবেদন অনুমোদিত হয়েছে। তারুণ্য পরিবারের সদস্য হওয়ার জন্য অভিনন্দন!" : "Your membership application has been approved. Welcome to the Tarunno community!";
   const html = '<div style="margin:0;background:#eef3f7;padding:24px 10px;font-family:Arial,Helvetica,sans-serif;color:#243247"><div style="max-width:620px;margin:auto;background:#fff;border:1px solid #d8e2ea;border-radius:10px;overflow:hidden"><div style="padding:22px;text-align:center;border-bottom:1px solid #e4ebf0"><div style="font-size:28px;font-weight:800"><span style="color:#18854b">তা</span><span style="color:#e23b43">রু</span><span style="color:#18854b">ণ্য</span></div><div style="font-size:12px;color:#4c6578">চলো এগিয়ে যাই · Tarunno</div></div><div style="background:#0877bd;color:white;padding:20px 24px"><div style="font-size:21px;font-weight:bold">'+(isBn?'তারুণ্যে স্বাগতম!':'Welcome to Tarunno!')+'</div><div style="margin-top:6px;font-size:13px">'+(isBn?'আপনার সদস্যপদ অনুমোদিত হয়েছে':'Your membership has been approved')+'</div></div><div style="padding:24px;line-height:1.65"><p>'+(isBn?'প্রিয় ':'Dear ')+escapeHtml_(name)+',</p><p>'+escapeHtml_(intro)+'</p><div style="text-align:center;background:#eff8f1;border:1px solid #cce8d3;border-radius:9px;padding:18px;margin:22px 0"><div style="font-size:12px;color:#42634b">'+(isBn?'আপনার সদস্য নম্বর':'YOUR MEMBERSHIP NUMBER')+'</div><div style="font-size:27px;letter-spacing:1px;font-weight:800;color:#18854b;margin-top:7px">'+memberNo+'</div></div><p>'+(isBn?'এই নম্বরটি ভবিষ্যতের জন্য সংরক্ষণ করুন।':'Please keep this number for your records.')+'</p><p>'+(isBn?'শুভেচ্ছান্তে,':'With gratitude,')+'<br><strong style="color:#18854b">তারুণ্য (Tarunno)</strong></p></div><div style="background:#f6f9fb;text-align:center;padding:15px;font-size:12px;color:#607285;border-top:1px solid #e1e9ef">wearetarunno@gmail.com · 017108638775<br>Shalbahan, Tetulia, Panchagarh, Bangladesh<br><strong style="color:#18854b">চলো এগিয়ে যাই</strong></div></div></div>';
-  MailApp.sendEmail({to:email, subject:subject, body:intro + "\nMembership Number: " + memberNo, htmlBody:html, name:"তারুণ্য | Tarunno", replyTo:"wearetarunno@gmail.com"});
+  try {
+    MailApp.sendEmail({to:email, subject:subject, body:intro + "\nMembership Number: " + memberNo, htmlBody:html, name:"তারুণ্য | Tarunno", replyTo:"wearetarunno@gmail.com"});
+  } catch (mailError) {
+    console.error("Membership welcome email failed for " + email + ": " + mailError);
+    MailApp.sendEmail({to:"wearetarunno@gmail.com", subject:"Tarunno: membership welcome email failed", body:"Could not send membership welcome email. Member: " + name + "; email: " + email + "; membership number: " + memberNo + "; error: " + mailError});
+  }
 }
 
 /* ---------- GET API ---------- */
@@ -322,7 +327,7 @@ function doPost(e) {
 
       registerMember: {
         sheet: "Members",
-        required: ["name", "phone", "gender", "dateOfBirth", "address"],
+        required: ["name", "phone", "gender", "dateOfBirth"],
         fields: ["name", "phone", "email", "skills", "gender", "dateOfBirth", "address", "photoData", "language"]
       },
       registerVolunteer: {
@@ -396,7 +401,8 @@ function doPost(e) {
       id: Utilities.getUuid(),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      status: "pending"
+      // Donor registrations publish immediately; membership applications require admin approval.
+      status: action === "registerDonor" ? "active" : "pending"
     };
 
     form.fields.forEach(function(field) {
@@ -422,39 +428,77 @@ function doPost(e) {
     const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getDisplayValues()[0];
     sheet.appendRow(headers.map(function(header) { return record[header] ?? ""; }));
 
-    // Branded HTML confirmation email. Email is sent by the account that owns/deploys this script.
+    // Branded confirmation email (if applicant supplied a valid email) and admin notification.
+    // MailApp sends from the Google account that owns/runs this deployed Apps Script.
     const recipient = String(data.email || "").trim();
-    if (recipient && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) {
-      const name = String(data.name || "বন্ধু").trim() || "বন্ধু";
-      const isBn = String(data.language || "bn").toLowerCase().startsWith("bn");
-      let subject = "", heading = "", intro = "", detail = "";
-      if (action === "registerMember") {
-        subject = isBn ? "তারুণ্যে সদস্যপদ আবেদনের নিশ্চয়তা" : "We received your Tarunno membership application";
-        heading = isBn ? "সদস্যপদ আবেদনের জন্য ধন্যবাদ!" : "Thank you for applying!";
-        intro = isBn ? "আপনার সদস্যপদ আবেদন আমরা পেয়েছি। আমাদের টিম তথ্য যাচাই করে সিদ্ধান্ত জানাবে। অনুমোদনের পর আলাদা Welcome Email-এ আপনার Membership Number পাঠানো হবে।" : "We have received your membership application. Our team will review your details. Once approved, you will receive a separate welcome email with your membership number.";
-      } else if (action === "registerDonor") {
-        subject = isBn ? "তারুণ্যে রক্তদাতা নিবন্ধনের জন্য ধন্যবাদ" : "Thank you for registering as a blood donor — Tarunno";
-        heading = isBn ? "রক্তদাতা নিবন্ধনের জন্য ধন্যবাদ!" : "Thank you for registering!";
-        intro = isBn ? "তারুণ্যের রক্তদাতা নেটওয়ার্কে আপনার তথ্য পেয়েছি। যাচাই ও অনুমোদনের পর প্রয়োজন অনুযায়ী যোগাযোগ করা হবে।" : "We have received your registration for Tarunno’s blood donor network. Our team will review it before it appears in donor search.";
-      } else if (action === "registerVolunteer") {
-        subject = isBn ? "তারুণ্যে আবেদন পাওয়ার নিশ্চয়তা" : "Thank you for contacting Tarunno";
-        heading = isBn ? "আপনার আবেদন পেয়েছি" : "We received your application";
-        intro = isBn ? "তারুণ্যে যুক্ত হতে আগ্রহী হওয়ার জন্য ধন্যবাদ। আমাদের টিম আপনার আবেদন পর্যালোচনা করবে।" : "Thank you for your interest in Tarunno. Our team will review your application.";
+    const validRecipient = recipient && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient);
+    const name = String(data.name || "বন্ধু").trim() || "বন্ধু";
+    const isBn = String(data.language || "bn").toLowerCase().startsWith("bn");
+    let subject = "", heading = "", intro = "";
+    if (action === "registerMember") {
+      subject = isBn ? "তারুণ্যে সদস্যপদ আবেদনের নিশ্চয়তা" : "We received your Tarunno membership application";
+      heading = isBn ? "সদস্যপদ আবেদনের জন্য ধন্যবাদ!" : "Thank you for applying!";
+      intro = isBn ? "আপনার সদস্যপদ আবেদন আমরা পেয়েছি। আমাদের টিম তথ্য যাচাই করবে। অনুমোদনের পর আলাদা Welcome Email-এ আপনার Membership Number পাঠানো হবে।" : "We have received your membership application. Our team will review your details. Once approved, you will receive a separate welcome email with your membership number.";
+    } else if (action === "registerDonor") {
+      subject = isBn ? "তারুণ্যে রক্তদাতা নিবন্ধনের জন্য ধন্যবাদ" : "Thank you for registering as a blood donor — Tarunno";
+      heading = isBn ? "রক্তদাতা নিবন্ধনের জন্য ধন্যবাদ!" : "Thank you for registering!";
+      intro = isBn ? "তারুণ্যের রক্তদাতা নেটওয়ার্কে আপনার নিবন্ধন সফল হয়েছে। আপনার সম্মতি অনুযায়ী তথ্য এখন রক্তদাতা অনুসন্ধানে দেখা যাবে।" : "Your registration for Tarunno’s blood donor network is successful. Your details are now available in donor search based on your consent.";
+    } else if (action === "registerVolunteer") {
+      subject = isBn ? "তারুণ্যে আবেদন পাওয়ার নিশ্চয়তা" : "Thank you for contacting Tarunno";
+      heading = isBn ? "আপনার আবেদন পেয়েছি" : "We received your application";
+      intro = isBn ? "তারুণ্যে যুক্ত হতে আগ্রহী হওয়ার জন্য ধন্যবাদ।" : "Thank you for your interest in Tarunno.";
+    }
+
+    let confirmationEmailSent = false;
+    let confirmationEmailError = "";
+    if (validRecipient && subject) {
+      const safeName = escapeHtml_(name);
+      const safeIntro = escapeHtml_(intro);
+      const statusText = action === "registerDonor" ? (isBn ? "সক্রিয়" : "Active") : (isBn ? "অনুমোদনের অপেক্ষায়" : "Pending approval");
+      const html = '<div style="margin:0;background:#eef3f7;padding:24px 10px;font-family:Arial,Helvetica,sans-serif;color:#243247"><div style="max-width:620px;margin:auto;background:#fff;border:1px solid #d8e2ea;border-radius:14px;overflow:hidden"><div style="padding:22px 24px;text-align:center;border-bottom:1px solid #e4ebf0"><div style="font-size:28px;font-weight:800"><span style="color:#18854b">তা</span><span style="color:#e23b43">রু</span><span style="color:#18854b">ণ্য</span></div><div style="font-size:12px;color:#4c6578;margin-top:4px">চলো এগিয়ে যাই · Tarunno</div></div><div style="background:#0877bd;color:#fff;padding:18px 24px"><div style="font-size:20px;font-weight:700">'+escapeHtml_(heading)+'</div><div style="font-size:13px;margin-top:7px">'+(isBn?'আপনার তথ্য সফলভাবে গ্রহণ করা হয়েছে।':'Your information has been received successfully.')+'</div></div><div style="padding:24px;line-height:1.65;font-size:14px"><p>'+(isBn?'প্রিয় ':'Dear ')+safeName+',</p><p>'+safeIntro+'</p><div style="background:#f0f7fc;border-radius:8px;padding:14px 16px;margin:18px 0"><div style="font-weight:700;color:#176b9b;margin-bottom:5px">'+(isBn?'আপনার আবেদন':'Your application')+'</div><div>'+(isBn?'নাম':'Name')+': '+safeName+'</div><div>'+(isBn?'অবস্থা':'Status')+': '+statusText+'</div></div><p>'+(isBn?'শুভেচ্ছান্তে,':'With gratitude,')+'<br><strong style="color:#18854b">তারুণ্য (Tarunno)</strong></p></div><div style="background:#f6f9fb;text-align:center;padding:15px;font-size:12px;color:#607285;border-top:1px solid #e1e9ef">wearetarunno@gmail.com · 017108638775<br>Shalbahan, Tetulia, Panchagarh, Bangladesh<br><strong style="color:#18854b">চলো এগিয়ে যাই</strong></div></div></div>';
+      try {
+        MailApp.sendEmail({to:recipient, subject:subject, body:intro, htmlBody:html, name:"তারুণ্য | Tarunno", replyTo:"wearetarunno@gmail.com"});
+        confirmationEmailSent = true;
+      } catch (mailError) {
+        confirmationEmailError = String(mailError.message || mailError);
+        console.error("Confirmation email failed: " + confirmationEmailError);
       }
-      if (subject) {
-        const safeName = escapeHtml_(name);
-        const safeIntro = escapeHtml_(intro);
-        const html = '<div style="margin:0;background:#eef3f7;padding:24px 10px;font-family:Arial,Helvetica,sans-serif;color:#243247"><div style="max-width:620px;margin:auto;background:#fff;border:1px solid #d8e2ea;border-radius:10px;overflow:hidden"><div style="padding:22px 24px;text-align:center;border-bottom:1px solid #e4ebf0"><div style="font-size:28px;font-weight:800;letter-spacing:-1px"><span style="color:#18854b">তা</span><span style="color:#e23b43">রু</span><span style="color:#18854b">ণ্য</span></div><div style="font-size:12px;color:#4c6578;margin-top:4px">চলো এগিয়ে যাই · Tarunno</div></div><div style="background:#0877bd;color:#fff;padding:18px 24px"><div style="font-size:20px;font-weight:700">'+escapeHtml_(heading)+'</div><div style="font-size:13px;margin-top:7px">'+(isBn?'আপনার তথ্য সফলভাবে গ্রহণ করা হয়েছে।':'Your information has been received successfully.')+'</div></div><div style="padding:24px;line-height:1.65;font-size:14px"><p>'+(isBn?'প্রিয় ':'Dear ')+safeName+',</p><p>'+safeIntro+'</p><div style="background:#f0f7fc;border-radius:8px;padding:14px 16px;margin:18px 0"><div style="font-weight:700;color:#176b9b;margin-bottom:5px">'+(isBn?'আপনার আবেদন':'Your application')+'</div><div>'+(isBn?'নাম':'Name')+': '+safeName+'</div><div>'+(isBn?'অবস্থা':'Status')+': '+(isBn?'পর্যালোচনার অপেক্ষায়':'Pending review')+'</div></div><p>'+(isBn?'শুভেচ্ছান্তে,':'With gratitude,')+'<br><strong style="color:#18854b">Hope for a better tomorrow — Tarunno</strong></p></div><div style="background:#f6f9fb;text-align:center;padding:15px;font-size:12px;color:#607285;border-top:1px solid #e1e9ef">wearetarunno@gmail.com · 017108638775<br>Shalbahan, Tetulia, Panchagarh, Bangladesh<br><span style="color:#18854b;font-weight:bold">চলো এগিয়ে যাই</span></div></div></div>';
-        try { MailApp.sendEmail({to:recipient, subject:subject, body:intro, htmlBody:html, name:"তারুণ্য | Tarunno", replyTo:"wearetarunno@gmail.com"}); }
-        catch (mailError) { console.error("Confirmation email failed: " + mailError); }
-      }
+    }
+
+    // Notify the organization for every form submission, even if the applicant left email blank.
+    let adminEmailSent = false;
+    let adminEmailError = "";
+    const adminSubject = action === "registerMember" ? "New Tarunno membership application" : action === "registerDonor" ? "New Tarunno blood donor registration" : "New Tarunno form submission";
+    const adminBody = [
+      "A new form submission was received.",
+      "Type: " + action,
+      "Name: " + name,
+      "Phone: " + String(record.phone || ""),
+      "Email: " + (recipient || "Not provided"),
+      "Status: " + String(record.status || ""),
+      "Blood group: " + String(record.bloodGroup || ""),
+      "District: " + String(record.district || ""),
+      "Upazila: " + String(record.upazila || ""),
+      "Address: " + String(record.address || ""),
+      "Consent: " + String(record.consent || ""),
+      "Record ID: " + String(record.id || "")
+    ].join("\n");
+    try {
+      MailApp.sendEmail({to:"wearetarunno@gmail.com", subject:adminSubject, body:adminBody, name:"Tarunno Website Notifications", replyTo:recipient && validRecipient ? recipient : "wearetarunno@gmail.com"});
+      adminEmailSent = true;
+    } catch (adminError) {
+      adminEmailError = String(adminError.message || adminError);
+      console.error("Admin notification email failed: " + adminEmailError);
     }
 
     return jsonResponse({
       success: true,
       message: "Submission received",
       id: record.id,
-      status: record.status
+      status: record.status,
+      confirmationEmailSent: confirmationEmailSent,
+      adminEmailSent: adminEmailSent,
+      emailError: confirmationEmailError || adminEmailError || ""
     });
 
   } catch (error) {

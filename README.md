@@ -59,3 +59,26 @@ The current `admin/index.html` is still an API diagnostic dashboard, not a secur
 4. Deploy a new Web App version using the same intended execution/access settings.
 5. Open `admin/index.html`, enter the admin key, and save donation methods or team profiles. The editor currently accepts public photo URLs; direct photo upload requires a separate image hosting endpoint.
 6. Existing bKash and Rocket numbers on `donation.html` are the previously supplied values. Add Nagad and bank details through the editor after setup.
+
+
+## Form/email update (important)
+- Membership form: email and address are optional; email label does not display “optional”. Membership requests stay `pending` until an admin approves them.
+- Blood donor form: email and address are optional; donor records are saved with `active` status and are eligible for donor search immediately when consent is checked.
+- Both forms attempt a branded confirmation email when a valid applicant email is supplied. Every registration also attempts an admin notification to `wearetarunno@gmail.com`.
+- After updating `codegs/New Text Document.txt`, paste it into the Apps Script project, save, run `setupTarunnoSheets()` and `installMembershipApprovalTrigger()` once to grant permissions, then Deploy > Manage deployments > Edit > New version > Deploy. Keep the existing web app URL.
+- Verify Apps Script execution logs and the JSON response fields `confirmationEmailSent` / `adminEmailSent`. Email delivery requires the deployed script owner to authorize MailApp and have remaining mail quota. If email is blank, no applicant confirmation can be delivered, but admin notification is still attempted.
+
+## Membership + Blood Donor form corrections
+- Home CTA text is now “Find Blood Donor” and still opens the blood page.
+- Email and Address fields remain optional but the word “optional” is removed from their labels. Membership address is no longer required by the API.
+- Blood donor registrations are written as `active` immediately (consent is still required), so they can appear in search without admin approval.
+- Membership applications remain `pending`; when an admin changes the Members sheet status to `approved`, the installable `onEdit` trigger generates a monthly serial membership number (example `T-20261001`) and sends the welcome email if a valid email was supplied.
+- Form submission attempts a confirmation email to the applicant when email is valid, plus an admin notification to `wearetarunno@gmail.com` on every submission. API response includes email-send status flags.
+
+### Required Apps Script step for the backend changes
+1. Open the Google Apps Script project connected to the Tarunno Database spreadsheet.
+2. Replace the script with `codegs/Code.gs` and Save.
+3. Run `setupTarunnoSheets()` once if headers/sheets need updating.
+4. Run `installMembershipApprovalTrigger()` once and authorize requested permissions. This is required for membership approval emails.
+5. Deploy > Manage deployments > Edit the current Web App > choose **New version** > Deploy. Keep the same `/exec` URL in `assets/js/config.js`.
+6. Test one donor registration and one membership application using valid test emails. Check Apps Script Executions if `adminEmailSent` or `confirmationEmailSent` is false. Email can only be delivered when MailApp permission and quota are available.

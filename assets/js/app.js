@@ -99,7 +99,10 @@
       const response = await fetch(API, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action, data }) });
       const result = await response.json();
       if (!result.success) throw new Error(result.error || "Submission failed");
-      status.textContent = lang === "bn" ? "তথ্য জমা হয়েছে। যাচাই শেষে অনুমোদন করা হবে।" : "Submitted successfully. It will be reviewed.";
+      let successMessage = action === "registerDonor" ? (lang === "bn" ? "রক্তদাতা হিসেবে নিবন্ধন সফল হয়েছে। আপনার তথ্য এখন রক্তদাতা অনুসন্ধানে দেখা যাবে।" : "Blood donor registration successful. Your details are now available in donor search.") : (lang === "bn" ? "সদস্যপদ আবেদন জমা হয়েছে। অনুমোদনের পর সদস্য নম্বর ইমেইলে পাঠানো হবে।" : "Membership application submitted. Your membership number will be emailed after approval.");
+      if (data.email && result.confirmationEmailSent === false) successMessage += lang === "bn" ? " তবে confirmation email পাঠানো যায়নি; Apps Script-এর execution log দেখুন।" : " However, the confirmation email could not be sent; check Apps Script execution logs.";
+      if (result.adminEmailSent === false) successMessage += lang === "bn" ? " Admin notification-ও পাঠানো যায়নি; Apps Script-এর MailApp permission পরীক্ষা করুন।" : " The admin notification also failed; check Apps Script MailApp permissions.";
+      status.textContent = successMessage;
       form.reset();
     } catch (e) {
       status.textContent = (lang === "bn" ? "জমা দেওয়া যায়নি: " : "Could not submit: ") + e.message + (lang === "bn" ? "। Apps Script POST/CORS পরীক্ষা প্রয়োজন হতে পারে।" : ". Apps Script POST/CORS may need testing.");
@@ -199,7 +202,7 @@
   async function submitPayload(action,data,status,form) {
     if (!API) { status.textContent="API URL is missing."; return; }
     const button=form.querySelector("button[type=submit]"); button.disabled=true; status.textContent=lang === "bn" ? "জমা হচ্ছে…" : "Submitting…";
-    try { const response=await fetch(API,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action,data})}); const result=await response.json(); if(!result.success) throw new Error(result.error||"Submission failed"); status.textContent=lang === "bn" ? "আবেদন জমা হয়েছে। অনুমোদনের জন্য অপেক্ষা করুন।" : "Application submitted for review."; form.reset(); $("#memberPhotoPreview").hidden=true; $("[name=photoData]").value=""; }
+    try { const response=await fetch(API,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action,data})}); const result=await response.json(); if(!result.success) throw new Error(result.error||"Submission failed"); status.textContent=lang === "bn" ? "আবেদন জমা হয়েছে। অনুমোদনের পর সদস্য নম্বর ইমেইলে পাঠানো হবে।" : "Application submitted. Your membership number will be emailed after approval."; if(data.email && result.confirmationEmailSent === false) status.textContent += lang === "bn" ? " তবে confirmation email পাঠানো যায়নি; Apps Script execution log দেখুন।" : " Confirmation email failed; check Apps Script execution logs."; if(result.adminEmailSent === false) status.textContent += lang === "bn" ? " Admin notification পাঠানো যায়নি; MailApp permission পরীক্ষা করুন।" : " Admin notification failed; check MailApp permissions."; form.reset(); $("#memberPhotoPreview").hidden=true; $("[name=photoData]").value=""; }
     catch(err){ status.textContent=(lang === "bn" ? "জমা দেওয়া যায়নি: " : "Could not submit: ")+err.message; }
     finally { button.disabled=false; }
   }
