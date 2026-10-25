@@ -134,3 +134,30 @@ nav a{font-size:13px;padding:8px 0;transition:color .2s}nav a:hover{color:var(--
   .site-header { gap:10px!important; padding:10px 16px!important; }
   .site-header nav { gap:6px!important; }
 }
+
+/* Homepage action links replacing the old statistics labels */
+.stats a{display:block;color:#fff;font-size:14px;font-weight:700;text-decoration:underline;text-underline-offset:4px}.stats a:hover,.stats a:focus{color:var(--gold)}@media(max-width:560px){.stats a{font-size:11px;line-height:1.35}}
+
+/* Reference-matched CTA buttons; preserve the original hero artwork dimensions */
+.hero-banner-only{display:block!important;min-height:0!important;height:auto!important;padding:0!important;overflow:hidden;background:#f7f8f2!important}
+.hero-banner-only .hero-banner{position:relative!important;display:block!important;inset:auto!important;width:100%!important;height:auto!important;max-height:none!important;object-fit:contain!important;opacity:1!important;z-index:0!important}
+.hero-banner-only .hero-actions{display:none!important}
+.cta-showcase{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px!important;align-items:center;padding:30px clamp(18px,5vw,64px)!important;background:#075d39!important}
+.cta-showcase>div{min-width:0;display:flex;justify-content:center;overflow:visible}
+.cta-showcase .cta-pill{position:relative;display:flex;align-items:center;gap:12px;width:100%;max-width:390px;min-height:64px;padding:8px 12px 8px 9px;border-radius:999px;text-decoration:none!important;font-family:'Manrope','Hind Siliguri',sans-serif;font-weight:800;font-size:clamp(12px,1.05vw,15px);line-height:1.2;box-shadow:0 5px 0 rgba(0,0,0,.18),0 10px 20px rgba(0,0,0,.12);transition:transform .2s,box-shadow .2s}
+.cta-showcase .cta-pill:before{content:"";position:absolute;inset:3px;border:2px solid rgba(255,255,255,.9);border-radius:inherit;pointer-events:none}
+.cta-showcase .cta-pill:hover{transform:translateY(-3px);box-shadow:0 8px 0 rgba(0,0,0,.15),0 14px 24px rgba(0,0,0,.16)}
+.cta-showcase .cta-icon{width:43px;height:43px;min-width:43px;border-radius:50%;display:grid;place-items:center;background:#fff;color:#e51d3f;box-shadow:0 0 0 2px rgba(255,255,255,.85)}
+.cta-showcase .cta-icon svg{width:23px;height:23px}
+.cta-showcase .cta-label{flex:1;text-align:left}
+.cta-showcase .cta-arrow{width:25px;height:25px;min-width:25px;display:grid;place-items:center;background:#fff;border-radius:50%;font-size:17px;line-height:1}
+.cta-member .cta-pill{background:linear-gradient(110deg,#07874b,#006334);color:#fff;border:2px solid #fff}
+.cta-member .cta-icon{color:#087443}
+.cta-member .cta-arrow{color:#087443}
+.cta-blood .cta-pill{background:linear-gradient(110deg,#ff2447,#e0002f);color:#fff;border:2px solid #fff}
+.cta-blood .cta-arrow{color:#ed1745}
+.cta-donate .cta-pill{background:#fff;color:#202a32;border:2px solid #ed1745}
+.cta-donate .cta-icon{background:#ed1745;color:#fff;box-shadow:0 0 0 2px #ed1745}
+.cta-donate .cta-arrow{border:1.5px solid #ed1745;color:#ed1745}
+@media(max-width:850px){.cta-showcase{gap:14px!important;padding:24px 16px!important}.cta-showcase .cta-pill{gap:8px;min-height:58px;padding:7px}.cta-showcase .cta-icon{width:36px;height:36px;min-width:36px}.cta-showcase .cta-icon svg{width:20px;height:20px}.cta-showcase .cta-arrow{width:22px;height:22px;min-width:22px}}
+@media(max-width:600px){.cta-showcase{grid-template-columns:1fr!important;gap:16px!important;padding:22px 18px!important}.cta-showcase>div{width:100%}.cta-showcase .cta-pill{max-width:430px;min-height:62px;font-size:14px;padding:8px 12px}.hero-banner-only .hero-banner{width:100%!important;height:auto!important;object-fit:contain!important}}
