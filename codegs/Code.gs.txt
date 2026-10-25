@@ -1,0 +1,511 @@
+
+/*************************************************
+ * TARUNNO WEBSITE - GOOGLE APPS SCRIPT API
+ *************************************************/
+
+const SHEET_HEADERS = {
+  SiteContent: ["key", "bn", "en", "updatedAt"],
+  Projects: [
+    "id", "titleBn", "titleEn", "descriptionBn",
+    "descriptionEn", "image", "date", "status"
+  ],
+  Programs: [
+    "id", "titleBn", "titleEn", "descriptionBn",
+    "descriptionEn", "image", "status"
+  ],
+  Members: [
+    "id", "name", "role", "category", "photo", "bioBn", "bioEn",
+    "status", "phone", "email", "bloodGroup", "gender", "dateOfBirth", "address",
+    "skills", "createdAt", "updatedAt", "membershipNumber", "language", "approvedAt"
+  ],
+  BloodDonors: [
+    "id", "name", "bloodGroup", "phone", "district",
+    "upazila", "lastDonation", "consent", "status",
+    "email", "gender", "dateOfBirth", "address", "createdAt"
+  ],
+  Donations: [
+    "id", "donorName", "phone", "method", "amount",
+    "transactionId", "createdAt", "status"
+  ],
+  DonationMethods: ["id", "method", "account", "accountName", "status", "updatedAt"],
+  TeamMembers: ["id", "category", "name", "designation", "photo", "status", "updatedAt"],
+  Gallery: [
+    "id", "title", "imageUrl", "projectId", "createdAt"
+  ],
+  NewsEvents: [
+    "id", "titleBn", "titleEn", "descriptionBn",
+    "descriptionEn", "image", "eventDate"
+  ],
+  Volunteers: [
+    "id", "name", "phone", "email", "skills",
+    "createdAt", "status", "gender", "dateOfBirth", "address", "applicationType"
+  ],
+  AdminUsers: ["email", "role", "status"]
+};
+
+
+/* ---------- COMMON HELPERS ---------- */
+
+function jsonResponse(data) {
+  return ContentService
+    .createTextOutput(JSON.stringify(data))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function getDatabase() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  if (!ss) {
+    throw new Error(
+      "No spreadsheet is connected. Open this script from your Google Sheet."
+    );
+  }
+
+  return ss;
+}
+
+function getSheet(sheetName) {
+  const sheet = getDatabase().getSheetByName(sheetName);
+
+  if (!sheet) {
+    throw new Error("Sheet not found: " + sheetName);
+  }
+
+  return sheet;
+}
+
+
+/* ---------- CREATE DATABASE SHEETS ---------- */
+
+function setupTarunnoSheets() {
+  const ss = getDatabase();
+
+  Object.entries(SHEET_HEADERS).forEach(function(entry) {
+    const sheetName = entry[0];
+    const headers = entry[1];
+
+    let sheet = ss.getSheetByName(sheetName);
+
+    if (!sheet) {
+      sheet = ss.insertSheet(sheetName);
+    }
+
+    if (sheet.getLastRow() === 0) {
+      sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+      sheet.setFrozenRows(1);
+    } else {
+      // Add newly introduced columns to existing sheets without changing existing data.
+      const current = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getDisplayValues()[0];
+      const missing = headers.filter(function(header) { return current.indexOf(header) === -1; });
+      if (missing.length) sheet.getRange(1, sheet.getLastColumn() + 1, 1, missing.length).setValues([missing]);
+    }
+  });
+
+  return "Tarunno database sheets are ready.";
+}
+
+
+/* ---------- READ SHEET DATA ---------- */
+
+function rowsAsObjects(sheetName) {
+  const sheet = getSheet(sheetName);
+  const values = sheet.getDataRange().getDisplayValues();
+
+  if (values.length < 2) {
+    return [];
+  }
+
+  const headers = values[0];
+
+  return values.slice(1)
+    .filter(function(row) {
+      return row.some(function(value) {
+        return value !== "";
+      });
+    })
+    .map(function(row) {
+      const item = {};
+
+      headers.forEach(function(header, index) {
+        item[header] = row[index] || "";
+      });
+
+      return item;
+    })
+    .filter(function(item) {
+      // Donor search performs its own approval + consent checks in the browser.
+      if (sheetName === "BloodDonors") return true;
+      return !item.status || String(item.status).toLowerCase() === "active";
+    });
+}
+
+
+
+
+/* ---------- MEMBERSHIP APPROVAL AUTOMATION ---------- */
+function escapeHtml_(value) {
+  return String(value == null ? "" : value).replace(/[&<>"']/g, function(c) {
+    return ({"&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"})[c];
+  });
+}
+function membershipNumberFor_(date, serial) {
+  return "T-" + Utilities.formatDate(date, Session.getScriptTimeZone(), "yyyyMM") + String(serial).padStart(2, "0");
+}
+function installMembershipApprovalTrigger() {
+  // Run this function manually once from the Apps Script editor and authorize requested permissions.
+  const ss = getDatabase();
+  ScriptApp.getProjectTriggers().filter(function(t) { return t.getHandlerFunction() === "onEdit"; }).forEach(function(t) { ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger("onEdit").forSpreadsheet(ss).onEdit().create();
+  return "Membership approval email trigger installed.";
+}
+function onEdit(e) {
+  if (!e || !e.range) return;
+  const sheet = e.range.getSheet();
+  if (sheet.getName() !== "Members" || e.range.getRow() < 2) return;
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getDisplayValues()[0];
+  const col = {}; headers.forEach(function(h, i) { col[h] = i + 1; });
+  if (!col.status || e.range.getColumn() !== col.status) return;
+  if (String(e.value || "").toLowerCase() !== "approved") return;
+  const row = e.range.getRow();
+  const values = sheet.getRange(row, 1, 1, sheet.getLastColumn()).getDisplayValues()[0];
+  const get = function(key) { return col[key] ? String(values[col[key] - 1] || "").trim() : ""; };
+  if (get("membershipNumber")) return; // Do not issue duplicate numbers/emails.
+  const email = get("email");
+  const now = new Date();
+  const prefix = "T-" + Utilities.formatDate(now, Session.getScriptTimeZone(), "yyyyMM");
+  let serial = 1;
+  if (col.membershipNumber && sheet.getLastRow() >= 2) {
+    const nums = sheet.getRange(2, col.membershipNumber, sheet.getLastRow()-1, 1).getDisplayValues().flat();
+    nums.forEach(function(n) { const m = String(n).match(new RegExp("^" + prefix + "(\\d+)$")); if (m) serial = Math.max(serial, Number(m[1]) + 1); });
+  }
+  const memberNo = prefix + String(serial).padStart(2, "0");
+  if (col.membershipNumber) sheet.getRange(row, col.membershipNumber).setValue(memberNo);
+  if (col.approvedAt) sheet.getRange(row, col.approvedAt).setValue(now);
+  if (col.role) sheet.getRange(row, col.role).setValue("Member");
+  // Public Members listing filters for active status. Preserve approval as active after processing.
+  if (col.status) sheet.getRange(row, col.status).setValue("active");
+  if (col.category) sheet.getRange(row, col.category).setValue("Approved member");
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return;
+  const name = get("name") || "বন্ধু";
+  const isBn = get("language").toLowerCase().startsWith("bn");
+  const subject = isBn ? "তারুণ্যে স্বাগতম — আপনার সদস্য নম্বর " + memberNo : "Welcome to Tarunno — Membership " + memberNo;
+  const intro = isBn ? "আপনার সদস্যপদ আবেদন অনুমোদিত হয়েছে। তারুণ্য পরিবারের সদস্য হওয়ার জন্য অভিনন্দন!" : "Your membership application has been approved. Welcome to the Tarunno community!";
+  const html = '<div style="margin:0;background:#eef3f7;padding:24px 10px;font-family:Arial,Helvetica,sans-serif;color:#243247"><div style="max-width:620px;margin:auto;background:#fff;border:1px solid #d8e2ea;border-radius:10px;overflow:hidden"><div style="padding:22px;text-align:center;border-bottom:1px solid #e4ebf0"><div style="font-size:28px;font-weight:800"><span style="color:#18854b">তা</span><span style="color:#e23b43">রু</span><span style="color:#18854b">ণ্য</span></div><div style="font-size:12px;color:#4c6578">চলো এগিয়ে যাই · Tarunno</div></div><div style="background:#0877bd;color:white;padding:20px 24px"><div style="font-size:21px;font-weight:bold">'+(isBn?'তারুণ্যে স্বাগতম!':'Welcome to Tarunno!')+'</div><div style="margin-top:6px;font-size:13px">'+(isBn?'আপনার সদস্যপদ অনুমোদিত হয়েছে':'Your membership has been approved')+'</div></div><div style="padding:24px;line-height:1.65"><p>'+(isBn?'প্রিয় ':'Dear ')+escapeHtml_(name)+',</p><p>'+escapeHtml_(intro)+'</p><div style="text-align:center;background:#eff8f1;border:1px solid #cce8d3;border-radius:9px;padding:18px;margin:22px 0"><div style="font-size:12px;color:#42634b">'+(isBn?'আপনার সদস্য নম্বর':'YOUR MEMBERSHIP NUMBER')+'</div><div style="font-size:27px;letter-spacing:1px;font-weight:800;color:#18854b;margin-top:7px">'+memberNo+'</div></div><p>'+(isBn?'এই নম্বরটি ভবিষ্যতের জন্য সংরক্ষণ করুন।':'Please keep this number for your records.')+'</p><p>'+(isBn?'শুভেচ্ছান্তে,':'With gratitude,')+'<br><strong style="color:#18854b">তারুণ্য (Tarunno)</strong></p></div><div style="background:#f6f9fb;text-align:center;padding:15px;font-size:12px;color:#607285;border-top:1px solid #e1e9ef">wearetarunno@gmail.com · 01710868775<br>Shalbahan, Tetulia, Panchagarh, Bangladesh<br><strong style="color:#18854b">চলো এগিয়ে যাই</strong></div></div></div>';
+  try {
+    MailApp.sendEmail({to:email, subject:subject, body:intro + "\nMembership Number: " + memberNo, htmlBody:html, name:"তারুণ্য | Tarunno", replyTo:"wearetarunno@gmail.com"});
+  } catch (mailError) {
+    console.error("Membership welcome email failed for " + email + ": " + mailError);
+    MailApp.sendEmail({to:"wearetarunno@gmail.com", subject:"Tarunno: membership welcome email failed", body:"Could not send membership welcome email. Member: " + name + "; email: " + email + "; membership number: " + memberNo + "; error: " + mailError});
+  }
+}
+
+/* ---------- GET API ---------- */
+
+function doGet(e) {
+  try {
+    const params = e && e.parameter ? e.parameter : {};
+    const action = params.action || "health";
+
+    if (action === "health") {
+      return jsonResponse({
+        success: true,
+        message: "Tarunno API is running"
+      });
+    }
+
+    const publicSheets = [
+      "SiteContent", "Projects", "Programs", "Members", "Gallery", "NewsEvents", "BloodDonors", "DonationMethods", "TeamMembers"
+    ];
+    const requestedSheet = action === "Donors" ? "BloodDonors" : action;
+
+    if (publicSheets.indexOf(requestedSheet) === -1) {
+      return jsonResponse({
+        success: false,
+        error: "UNKNOWN_ACTION",
+        allowedActions: publicSheets
+      });
+    }
+
+    return jsonResponse({
+      success: true,
+      data: rowsAsObjects(requestedSheet)
+    });
+
+  } catch (error) {
+    return jsonResponse({
+      success: false,
+      error: String(error.message || error)
+    });
+  }
+}
+
+
+/* ---------- POST API: PUBLIC FORMS ---------- */
+
+function doPost(e) {
+  try {
+    if (!e || !e.postData || !e.postData.contents) {
+      return jsonResponse({
+        success: false,
+        error: "MISSING_BODY"
+      });
+    }
+
+    let body;
+
+    try {
+      body = JSON.parse(e.postData.contents);
+    } catch (parseError) {
+      return jsonResponse({
+        success: false,
+        error: "INVALID_JSON"
+      });
+    }
+
+    const action = String(body.action || "");
+    const data = body.data || {};
+
+    // Admin-managed donation methods and About Us team directory. Configure Script Property TARUNNO_ADMIN_KEY before use.
+    const adminActions = ["saveDonationMethod", "deleteDonationMethod", "saveTeamMember", "deleteTeamMember"];
+    if (adminActions.indexOf(action) !== -1) {
+      const expectedKey = PropertiesService.getScriptProperties().getProperty("TARUNNO_ADMIN_KEY");
+      if (!expectedKey || String(body.adminKey || "") !== expectedKey) return jsonResponse({success:false,error:"ADMIN_AUTH_REQUIRED"});
+      const teamAction = action.indexOf("TeamMember") !== -1;
+      const targetSheet = getSheet(teamAction ? "TeamMembers" : "DonationMethods");
+      const headers = targetSheet.getRange(1,1,1,targetSheet.getLastColumn()).getDisplayValues()[0];
+      const rows = rowsAsObjects(teamAction ? "TeamMembers" : "DonationMethods");
+      const id = String(data.id || "").trim();
+      if (action.indexOf("delete") === 0) {
+        const rowIndex = rows.findIndex(function(r){return String(r.id) === id;});
+        if (rowIndex < 0) return jsonResponse({success:false,error:"RECORD_NOT_FOUND"});
+        targetSheet.deleteRow(rowIndex + 2);
+        return jsonResponse({success:true,deleted:id});
+      }
+      const required = teamAction ? ["category","name","designation"] : ["method","account"];
+      for (let i=0;i<required.length;i++) if (!String(data[required[i]] || "").trim()) return jsonResponse({success:false,error:"MISSING_FIELD",field:required[i]});
+      const record = {id:id || Utilities.getUuid(), updatedAt:new Date().toISOString(), status:String(data.status || "active")};
+      if (teamAction) {
+        ["category","name","designation","photo"].forEach(function(k){record[k]=String(data[k] || "").trim();});
+        if (data.photoData && String(data.photoData).indexOf("data:image/") === 0) {
+          const parts = String(data.photoData).match(/^data:(image\/(?:png|jpeg|webp));base64,([\s\S]+)$/);
+          if (!parts) return jsonResponse({success:false,error:"INVALID_IMAGE"});
+          const bytes = Utilities.base64Decode(parts[2]);
+          if (bytes.length > 1500000) return jsonResponse({success:false,error:"IMAGE_TOO_LARGE",message:"Please use an image under 1.5 MB."});
+          const blob = Utilities.newBlob(bytes, parts[1], "tarunno-team-" + record.id + (parts[1] === "image/png" ? ".png" : ".jpg"));
+          const folderName = "Tarunno Team Photos";
+          const folders = DriveApp.getFoldersByName(folderName);
+          const folder = folders.hasNext() ? folders.next() : DriveApp.createFolder(folderName);
+          const file = folder.createFile(blob);
+          file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+          record.photo = "https://drive.google.com/uc?export=view&id=" + file.getId();
+        }
+      } else {
+        ["method","account","accountName"].forEach(function(k){record[k]=String(data[k] || "").trim();});
+      }
+      const existingIndex = id ? rows.findIndex(function(r){return String(r.id) === id;}) : -1;
+      const values = headers.map(function(h){return record[h] === undefined ? (existingIndex >= 0 ? rows[existingIndex][h] || "" : "") : record[h];});
+      if (existingIndex >= 0) targetSheet.getRange(existingIndex + 2,1,1,headers.length).setValues([values]); else targetSheet.appendRow(values);
+      return jsonResponse({success:true,data:record});
+    }
+
+    const forms = {
+      registerDonor: {
+        sheet: "BloodDonors",
+        required: ["name", "bloodGroup", "phone", "district", "upazila", "gender", "dateOfBirth", "consent"],
+        fields: ["name", "bloodGroup", "phone", "district", "upazila", "lastDonation", "consent", "email", "gender", "dateOfBirth", "address"]
+      },
+
+      submitDonation: {
+        sheet: "Donations",
+        required: [
+          "donorName", "method", "amount", "transactionId"
+        ],
+        fields: [
+          "donorName", "phone", "method",
+          "amount", "transactionId"
+        ]
+      },
+
+      registerMember: {
+        sheet: "Members",
+        required: ["name", "phone", "email", "bloodGroup", "gender", "dateOfBirth", "address", "skills", "photoData"],
+        fields: ["name", "phone", "email", "bloodGroup", "skills", "gender", "dateOfBirth", "address", "photoData", "language"]
+      },
+      registerVolunteer: {
+        sheet: "Volunteers",
+        required: ["name", "phone"],
+        fields: ["name", "phone", "email", "skills", "gender", "dateOfBirth", "address", "applicationType"]
+      }
+    };
+
+    const form = forms[action];
+
+    if (!form) {
+      return jsonResponse({
+        success: false,
+        error: "UNKNOWN_ACTION",
+        allowedActions: Object.keys(forms)
+      });
+    }
+
+    // Validate required fields.
+    for (let i = 0; i < form.required.length; i++) {
+      const field = form.required[i];
+
+      if (
+        data[field] === undefined ||
+        data[field] === null ||
+        String(data[field]).trim() === ""
+      ) {
+        return jsonResponse({
+          success: false,
+          error: "MISSING_FIELD",
+          field: field
+        });
+      }
+    }
+
+    // Donor registration requires explicit consent.
+    if (
+      action === "registerDonor" &&
+      String(data.consent).toLowerCase() !== "true"
+    ) {
+      return jsonResponse({
+        success: false,
+        error: "CONSENT_REQUIRED"
+      });
+    }
+
+    // Validate donation details.
+    if (action === "submitDonation") {
+      const amount = Number(data.amount);
+      const allowedMethods = ["Bkash", "Nagad", "Rocket"];
+
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return jsonResponse({
+          success: false,
+          error: "INVALID_AMOUNT"
+        });
+      }
+
+      if (allowedMethods.indexOf(String(data.method)) === -1) {
+        return jsonResponse({
+          success: false,
+          error: "INVALID_PAYMENT_METHOD"
+        });
+      }
+    }
+
+    const sheet = getSheet(form.sheet);
+
+    const record = {
+      id: Utilities.getUuid(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      // Donor registrations publish immediately; membership applications require admin approval.
+      status: action === "registerDonor" ? "active" : "pending"
+    };
+
+    form.fields.forEach(function(field) {
+      record[field] = String(data[field] ?? "").trim();
+    });
+    if (action === "registerMember") {
+      record.role = "Applicant";
+      record.category = "Membership application";
+      record.photo = record.photoData || "";
+      delete record.photoData;
+      record.status = "pending";
+      record.language = String(data.language || "bn");
+    }
+    // Normalize Bangladeshi mobile numbers that were entered without the leading zero.
+    if (record.phone) {
+      let phone = record.phone.replace(/[\s()-]/g, "");
+      if (/^1[3-9]\d{8}$/.test(phone)) phone = "0" + phone;
+      if (/^8801[3-9]\d{8}$/.test(phone)) phone = "0" + phone.slice(3);
+      record.phone = phone;
+    }
+
+    // Use the actual sheet header order so newly appended columns remain aligned.
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getDisplayValues()[0];
+    sheet.appendRow(headers.map(function(header) { return record[header] ?? ""; }));
+
+    // Branded confirmation email (if applicant supplied a valid email) and admin notification.
+    // MailApp sends from the Google account that owns/runs this deployed Apps Script.
+    const recipient = String(data.email || "").trim();
+    const validRecipient = recipient && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient);
+    const name = String(data.name || "বন্ধু").trim() || "বন্ধু";
+    const isBn = String(data.language || "bn").toLowerCase().startsWith("bn");
+    let subject = "", heading = "", intro = "";
+    if (action === "registerMember") {
+      subject = isBn ? "তারুণ্যে সদস্যপদ আবেদনের নিশ্চয়তা" : "We received your Tarunno membership application";
+      heading = isBn ? "সদস্যপদ আবেদনের জন্য ধন্যবাদ!" : "Thank you for applying!";
+      intro = isBn ? "আপনার সদস্যপদ আবেদন আমরা পেয়েছি। আমাদের টিম তথ্য যাচাই করবে। অনুমোদনের পর আলাদা Welcome Email-এ আপনার Membership Number পাঠানো হবে।" : "We have received your membership application. Our team will review your details. Once approved, you will receive a separate welcome email with your membership number.";
+    } else if (action === "registerDonor") {
+      subject = isBn ? "তারুণ্যে রক্তদাতা নিবন্ধনের জন্য ধন্যবাদ" : "Thank you for registering as a blood donor — Tarunno";
+      heading = isBn ? "রক্তদাতা নিবন্ধনের জন্য ধন্যবাদ!" : "Thank you for registering!";
+      intro = isBn ? "তারুণ্যের রক্তদাতা নেটওয়ার্কে আপনার নিবন্ধন সফল হয়েছে। আপনার সম্মতি অনুযায়ী তথ্য এখন রক্তদাতা অনুসন্ধানে দেখা যাবে।" : "Your registration for Tarunno’s blood donor network is successful. Your details are now available in donor search based on your consent.";
+    } else if (action === "registerVolunteer") {
+      subject = isBn ? "তারুণ্যে আবেদন পাওয়ার নিশ্চয়তা" : "Thank you for contacting Tarunno";
+      heading = isBn ? "আপনার আবেদন পেয়েছি" : "We received your application";
+      intro = isBn ? "তারুণ্যে যুক্ত হতে আগ্রহী হওয়ার জন্য ধন্যবাদ।" : "Thank you for your interest in Tarunno.";
+    }
+
+    let confirmationEmailSent = false;
+    let confirmationEmailError = "";
+    if (validRecipient && subject) {
+      const safeName = escapeHtml_(name);
+      const safeIntro = escapeHtml_(intro);
+      const statusText = action === "registerDonor" ? (isBn ? "সক্রিয়" : "Active") : (isBn ? "অনুমোদনের অপেক্ষায়" : "Pending approval");
+      const html = '<div style="margin:0;background:#eef3f7;padding:24px 10px;font-family:Arial,Helvetica,sans-serif;color:#243247"><div style="max-width:620px;margin:auto;background:#fff;border:1px solid #d8e2ea;border-radius:14px;overflow:hidden"><div style="padding:22px 24px;text-align:center;border-bottom:1px solid #e4ebf0"><div style="font-size:28px;font-weight:800"><span style="color:#18854b">তা</span><span style="color:#e23b43">রু</span><span style="color:#18854b">ণ্য</span></div><div style="font-size:12px;color:#4c6578;margin-top:4px">চলো এগিয়ে যাই · Tarunno</div></div><div style="background:#0877bd;color:#fff;padding:18px 24px"><div style="font-size:20px;font-weight:700">'+escapeHtml_(heading)+'</div><div style="font-size:13px;margin-top:7px">'+(isBn?'আপনার তথ্য সফলভাবে গ্রহণ করা হয়েছে।':'Your information has been received successfully.')+'</div></div><div style="padding:24px;line-height:1.65;font-size:14px"><p>'+(isBn?'প্রিয় ':'Dear ')+safeName+',</p><p>'+safeIntro+'</p><div style="background:#f0f7fc;border-radius:8px;padding:14px 16px;margin:18px 0"><div style="font-weight:700;color:#176b9b;margin-bottom:5px">'+(isBn?'আপনার আবেদন':'Your application')+'</div><div>'+(isBn?'নাম':'Name')+': '+safeName+'</div><div>'+(isBn?'অবস্থা':'Status')+': '+statusText+'</div></div><p>'+(isBn?'শুভেচ্ছান্তে,':'With gratitude,')+'<br><strong style="color:#18854b">তারুণ্য (Tarunno)</strong></p></div><div style="background:#f6f9fb;text-align:center;padding:15px;font-size:12px;color:#607285;border-top:1px solid #e1e9ef">wearetarunno@gmail.com · 01710868775<br>Shalbahan, Tetulia, Panchagarh, Bangladesh<br><strong style="color:#18854b">চলো এগিয়ে যাই</strong></div></div></div>';
+      try {
+        MailApp.sendEmail({to:recipient, subject:subject, body:intro, htmlBody:html, name:"তারুণ্য | Tarunno", replyTo:"wearetarunno@gmail.com"});
+        confirmationEmailSent = true;
+      } catch (mailError) {
+        confirmationEmailError = String(mailError.message || mailError);
+        console.error("Confirmation email failed: " + confirmationEmailError);
+      }
+    }
+
+    // Notify the organization for every form submission, even if the applicant left email blank.
+    let adminEmailSent = false;
+    let adminEmailError = "";
+    const adminSubject = action === "registerMember" ? "New Tarunno membership application" : action === "registerDonor" ? "New Tarunno blood donor registration" : "New Tarunno form submission";
+    const adminBody = [
+      "A new form submission was received.",
+      "Type: " + action,
+      "Name: " + name,
+      "Phone: " + String(record.phone || ""),
+      "Email: " + (recipient || "Not provided"),
+      "Status: " + String(record.status || ""),
+      "Blood group: " + String(record.bloodGroup || ""),
+      "District: " + String(record.district || ""),
+      "Upazila: " + String(record.upazila || ""),
+      "Address: " + String(record.address || ""),
+      "Consent: " + String(record.consent || ""),
+      "Record ID: " + String(record.id || "")
+    ].join("\n");
+    try {
+      MailApp.sendEmail({to:"wearetarunno@gmail.com", subject:adminSubject, body:adminBody, name:"Tarunno Website Notifications", replyTo:recipient && validRecipient ? recipient : "wearetarunno@gmail.com"});
+      adminEmailSent = true;
+    } catch (adminError) {
+      adminEmailError = String(adminError.message || adminError);
+      console.error("Admin notification email failed: " + adminEmailError);
+    }
+
+    return jsonResponse({
+      success: true,
+      message: "Submission received",
+      id: record.id,
+      status: record.status,
+      confirmationEmailSent: confirmationEmailSent,
+      adminEmailSent: adminEmailSent,
+      emailError: confirmationEmailError || adminEmailError || ""
+    });
+
+  } catch (error) {
+    return jsonResponse({
+      success: false,
+      error: String(error.message || error)
+    });
+  }
+}
